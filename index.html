@@ -1,0 +1,1807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Five routes for getting Duck Creek data into Snowflake for Gyrus, explained step by step, with a weighted framework for choosing between them.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20y%3D%22.9em%22%20font-size%3D%2290%22%3E%F0%9F%A7%AD%3C%2Ftext%3E%3C%2Fsvg%3E">
+<title>Gyrus Ingestion Decision</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
+
+<style>
+:root{
+  --bg:#F4F6F7;--surface:#FFFFFF;--surface-2:#EDF1F2;--code-bg:#F0F4F5;
+  --text:#14202B;--muted:#57676F;--faint:#7C8B93;
+  --rule:#D5DDE0;--rule-strong:#B7C3C8;
+  --accent:#0E6B70;--accent-soft:#DEEDED;--accent-line:#8FC0C2;
+  --good:#2F6B3F;--good-soft:#E0EDE3;
+  --warn:#A05F12;--warn-soft:#F6EADA;
+  --bad:#8E2F2E;--bad-soft:#F3E1E0;
+  --kw:#1F5C8B;--cm:#6C7F87;
+  --shadow:0 1px 2px rgba(20,32,43,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1720;--surface:#151F29;--surface-2:#1B2733;--code-bg:#111A23;
+    --text:#E4EBEF;--muted:#9AAAB4;--faint:#7B8B96;
+    --rule:#27343F;--rule-strong:#384955;
+    --accent:#54B4B8;--accent-soft:#123336;--accent-line:#2E6C70;
+    --good:#77BB8C;--good-soft:#16301F;
+    --warn:#D9A25C;--warn-soft:#33260F;
+    --bad:#DB8A88;--bad-soft:#331A19;
+    --kw:#7FB4DA;--cm:#6F828C;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1720;--surface:#151F29;--surface-2:#1B2733;--code-bg:#111A23;
+  --text:#E4EBEF;--muted:#9AAAB4;--faint:#7B8B96;
+  --rule:#27343F;--rule-strong:#384955;
+  --accent:#54B4B8;--accent-soft:#123336;--accent-line:#2E6C70;
+  --good:#77BB8C;--good-soft:#16301F;
+  --warn:#D9A25C;--warn-soft:#33260F;
+  --bad:#DB8A88;--bad-soft:#331A19;
+  --kw:#7FB4DA;--cm:#6F828C;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,h5{font-family:Newsreader,Georgia,"Times New Roman",serif;font-weight:500;line-height:1.18;text-wrap:balance;margin:0}
+p{margin:0}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-line)}
+a:hover{border-bottom-color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
+.label{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:500;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;font-size:.93em}
+
+.shell{max-width:1280px;margin:0 auto;padding:0 28px 96px}
+.masthead{border-bottom:2px solid var(--text);padding:44px 0 22px}
+.mast-top{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:baseline;margin-bottom:26px}
+.brandmark{display:flex;align-items:baseline;gap:10px}
+.brandmark .bm-name{font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--text)}
+.brandmark .bm-div{color:var(--rule-strong)}
+h1{font-size:clamp(34px,5.2vw,58px);letter-spacing:-.02em;max-width:19ch}
+.standfirst{margin-top:18px;font-size:clamp(16px,1.9vw,19px);color:var(--muted);max-width:64ch}
+.mast-meta{display:flex;flex-wrap:wrap;margin-top:30px;border-top:1px solid var(--rule)}
+.mast-meta div{flex:1 1 150px;padding:12px 18px 12px 0;border-right:1px solid var(--rule)}
+.mast-meta div:last-child{border-right:0}
+.mast-meta dt{display:block;margin-bottom:3px}
+.mast-meta dd{margin:0;font-size:14px;font-weight:500}
+
+.body-grid{display:grid;grid-template-columns:224px minmax(0,1fr);gap:52px;align-items:start;margin-top:48px}
+@media (max-width:1040px){.body-grid{grid-template-columns:1fr;gap:0}.toc{display:none}}
+.toc{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto;padding-bottom:20px}
+.toc ol{list-style:none;margin:10px 0 0;padding:0;border-left:1px solid var(--rule)}
+.toc a{display:block;padding:5px 0 5px 13px;font-size:13px;color:var(--muted);border-bottom:0;border-left:2px solid transparent;margin-left:-1px;line-height:1.32}
+.toc a:hover{color:var(--text)}
+.toc a.on{color:var(--accent);border-left-color:var(--accent);font-weight:500}
+.toc .grp{display:block;padding:14px 0 4px 13px;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+
+main{min-width:0;display:flex;flex-direction:column;gap:60px}
+section{scroll-margin-top:20px;display:flex;flex-direction:column;gap:20px}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--rule-strong);padding-bottom:10px}
+.sec-num{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.08em;flex:none}
+h2{font-size:clamp(24px,3.1vw,31px);letter-spacing:-.015em}
+h3{font-size:20px;letter-spacing:-.01em}
+h4{font-size:16.5px;font-family:"IBM Plex Sans",sans-serif;font-weight:600}
+.prose{max-width:68ch;display:flex;flex-direction:column;gap:15px}
+.lede{font-size:18px;color:var(--muted)}
+.sub{display:flex;flex-direction:column;gap:16px}
+ul.tight{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px;max-width:70ch}
+ul.tight li::marker{color:var(--accent-line)}
+
+.note{border-left:3px solid var(--accent);background:var(--accent-soft);padding:15px 19px;display:flex;flex-direction:column;gap:7px;max-width:72ch}
+.note.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.note.bad{border-left-color:var(--bad);background:var(--bad-soft)}
+.note p{font-size:15.5px}
+
+.code{background:var(--code-bg);border:1px solid var(--rule);border-left:2px solid var(--accent);margin:0}
+.code .cap{padding:7px 13px;border-bottom:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);background:var(--surface-2)}
+.code pre{margin:0;padding:13px 15px;overflow-x:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.4px;line-height:1.6;color:var(--text)}
+.code .k{color:var(--kw);font-weight:500}
+.code .c{color:var(--cm);font-style:italic}
+
+/* step walkthrough */
+.steps{display:flex;flex-direction:column}
+.istep{display:grid;grid-template-columns:96px minmax(0,1fr);border:1px solid var(--rule);border-left:2px solid var(--accent);background:var(--surface)}
+.istep + .istep{border-top:0}
+@media (max-width:620px){.istep{grid-template-columns:1fr}.istep-n{border-right:0;border-bottom:1px solid var(--rule)}}
+.istep-n{padding:16px 12px;background:var(--surface-2);border-right:1px solid var(--rule);font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.istep-b{padding:17px 20px 19px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.istep-b h4{font-size:16.5px}
+.istep-b p{font-size:15px;max-width:68ch}
+.istep-b ul{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:6px;font-size:14.5px;max-width:68ch}
+.istep-b ul li::marker{color:var(--accent-line)}
+.why{border-left:2px solid var(--rule-strong);padding:2px 0 2px 13px;font-size:14.5px;color:var(--muted);max-width:70ch}
+.why strong{color:var(--text);font-weight:600}
+.why.bad{border-left-color:var(--bad)}
+.why.good{border-left-color:var(--good)}
+.termbar{display:flex;flex-wrap:wrap;gap:6px}
+.term{font-family:"IBM Plex Mono",monospace;font-size:11px;padding:2px 7px;border:1px solid var(--rule-strong);background:var(--surface-2);color:var(--muted)}
+
+.flow{border:1px solid var(--rule);background:var(--surface);padding:26px 24px;overflow-x:auto}
+.flow-row{display:flex;align-items:stretch;min-width:660px}
+.flow-src{flex:0 0 250px;display:flex;flex-direction:column;gap:8px;padding-right:22px;border-right:2px dashed var(--rule-strong)}
+.src-item{border:1px solid var(--rule);background:var(--surface-2);padding:9px 12px;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.src-item .tag{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+.src-item.q{border-style:dashed;color:var(--muted)}
+.flow-dest{flex:1;padding-left:22px;display:flex;flex-direction:column;gap:8px;min-width:270px}
+.dest-stage{display:flex;align-items:center;gap:12px}
+.dest-stage .bar{width:3px;align-self:stretch;background:var(--accent);flex:none}
+.dest-stage .txt{padding:7px 0}
+.dest-stage .nm{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:600;letter-spacing:.05em}
+.dest-stage .ds{font-size:13px;color:var(--muted);line-height:1.45}
+.flow-cap{margin-top:18px;padding-top:14px;border-top:1px solid var(--rule);font-size:13.5px;color:var(--muted);max-width:76ch}
+
+.opt-head{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;padding:16px 20px;border:1px solid var(--rule);border-top:2px solid var(--text);background:var(--surface);box-shadow:var(--shadow)}
+.opt-id{display:flex;gap:14px;align-items:baseline;min-width:0}
+.rank{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;color:var(--surface);background:var(--text);padding:3px 8px;letter-spacing:.06em;flex:none}
+.opt-name{font-size:21px;line-height:1.22}
+.opt-sub{font-size:13.5px;color:var(--muted);margin-top:4px;max-width:60ch}
+.verdict{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;padding:5px 10px;white-space:nowrap;flex:none;border:1px solid}
+.v-best{color:var(--good);background:var(--good-soft);border-color:var(--good)}
+.v-fall{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-line)}
+.v-part{color:var(--warn);background:var(--warn-soft);border-color:var(--warn)}
+.v-no{color:var(--bad);background:var(--bad-soft);border-color:var(--bad)}
+
+.scorerow{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));border:1px solid var(--rule);border-top:0;background:var(--surface)}
+.score{padding:12px 14px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:5px}
+.score:last-child{border-right:0}
+.score-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.score-nm{font-size:11.5px;color:var(--muted)}
+.score-vl{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600}
+.meter{display:flex;gap:3px}
+.meter i{height:5px;flex:1;background:var(--rule);border-radius:1px}
+.meter i.f{background:var(--accent)}
+.meter.g i.f{background:var(--good)}
+.meter.w i.f{background:var(--warn)}
+.meter.b i.f{background:var(--bad)}
+
+.tw{overflow-x:auto;border:1px solid var(--rule);background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px}
+caption{text-align:left;padding:13px 16px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--rule)}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);background:var(--surface-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.opt-cell{font-weight:500;min-width:170px}
+td.tot{font-family:"IBM Plex Mono",monospace;font-weight:600}
+tr.win td{background:var(--good-soft)}
+.pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;padding:2px 7px;letter-spacing:.05em;white-space:nowrap;border:1px solid;display:inline-block}
+.p-g{color:var(--good);border-color:var(--good);background:var(--good-soft)}
+.p-w{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.p-b{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+.p-n{color:var(--muted);border-color:var(--rule-strong);background:var(--surface-2)}
+
+.ladder{display:flex;flex-direction:column;border:1px solid var(--rule);background:var(--surface)}
+.rung{display:grid;grid-template-columns:110px minmax(0,1fr);border-bottom:1px solid var(--rule)}
+.rung:last-child{border-bottom:0}
+@media (max-width:640px){.rung{grid-template-columns:1fr}.rung-l{border-right:0;border-bottom:1px solid var(--rule)}}
+.rung-l{padding:18px;border-right:1px solid var(--rule);background:var(--surface-2);display:flex;flex-direction:column;gap:3px;justify-content:center}
+.rung-l .pl{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:600;letter-spacing:.06em}
+.rung-l .cd{font-size:11.5px;color:var(--muted);line-height:1.3}
+.rung-r{padding:18px 20px;display:flex;flex-direction:column;gap:8px}
+.rung-r h4{font-size:16px}
+.rung-r p{font-size:14.5px;color:var(--muted);max-width:68ch}
+.rung-r .cond{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--accent)}
+.rung.now .rung-l{background:var(--accent-soft)}
+.rung.now .pl{color:var(--accent)}
+
+.qgroup{display:flex;flex-direction:column;gap:10px}
+.qgroup h4{padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.qlist{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.qlist li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;font-size:15px;align-items:start}
+.qlist .qn{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--faint);padding-top:4px}
+.qlist .qw{display:block;font-size:13.5px;color:var(--muted);margin-top:2px}
+
+.plan{display:flex;flex-direction:column;border-left:2px solid var(--rule)}
+.step{display:grid;grid-template-columns:114px minmax(0,1fr);gap:20px;padding:0 0 24px 22px;position:relative}
+.step:last-child{padding-bottom:0}
+.step::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;background:var(--accent);border:2px solid var(--bg);border-radius:50%}
+@media (max-width:640px){.step{grid-template-columns:1fr;gap:6px}}
+.step-when{font-family:"IBM Plex Mono",monospace;font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);padding-top:3px}
+.step-what{display:flex;flex-direction:column;gap:6px}
+.step-what h4{font-size:16px}
+.step-what p{font-size:14.5px;color:var(--muted);max-width:66ch}
+.owner{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);letter-spacing:.05em}
+
+footer{margin-top:72px;padding-top:22px;border-top:2px solid var(--text);display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:baseline}
+footer p{font-size:13px;color:var(--faint);max-width:58ch}
+.srclist{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px}
+@media (prefers-reduced-motion:no-preference){.toc a{transition:color .16s ease,border-color .16s ease}}
+</style>
+<style>
+/* minimal reset — the artifact host normally supplies this */
+img,svg,video{max-width:100%;height:auto}
+table{border-collapse:collapse}
+button,input,select,textarea{font:inherit;color:inherit}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header class="masthead">
+  <div class="mast-top">
+    <div class="brandmark"><span class="bm-name">Gyrus</span><span class="bm-div">/</span><span class="bm-name" style="color:var(--muted)">Data Platform</span></div>
+    <span class="label">Decision record &middot; DR-001 &middot; rev 3</span>
+  </div>
+  <h1>How do we get Duck&nbsp;Creek data into Snowflake?</h1>
+  <p class="standfirst">Five routes explained from first principles &mdash; what each one does, the exact steps to build it, what breaks if you get a step wrong, and a scored framework for choosing between them. Written to be followed by an engineer who has not used Snowflake before.</p>
+  <dl class="mast-meta">
+    <div><dt class="label">Status</dt><dd>Open &mdash; awaiting vendor answers</dd></div>
+    <div><dt class="label">Decides</dt><dd>Ingestion route into RAW</dd></div>
+    <div><dt class="label">Blocks</dt><dd>Nothing (see &sect;04)</dd></div>
+    <div><dt class="label">Audience</dt><dd>Engineering &amp; platform lead</dd></div>
+  </dl>
+</header>
+
+<div class="body-grid">
+  <nav class="toc" aria-label="Contents">
+    <span class="label">Contents</span>
+    <ol>
+      <li><span class="grp">Understand</span></li>
+      <li><a href="#s1">01 &nbsp;The decision</a></li>
+      <li><a href="#s2">02 &nbsp;Snowflake in 10 minutes</a></li>
+      <li><a href="#s3">03 &nbsp;What we know</a></li>
+      <li><a href="#s4">04 &nbsp;Build this first</a></li>
+      <li><span class="grp">The five routes</span></li>
+      <li><a href="#s5">05 &nbsp;A &middot; Clarity data share</a></li>
+      <li><a href="#s6">06 &nbsp;B &middot; Scheduled extracts</a></li>
+      <li><a href="#s7">07 &nbsp;C &middot; API ingestion</a></li>
+      <li><a href="#s8">08 &nbsp;D &middot; Managed connector</a></li>
+      <li><a href="#s9">09 &nbsp;E &middot; Direct database</a></li>
+      <li><span class="grp">Cross-cutting</span></li>
+      <li><a href="#s10">10 &nbsp;Deletes</a></li>
+      <li><a href="#s11">11 &nbsp;The Gyrus model</a></li>
+      <li><a href="#s12">12 &nbsp;Cost</a></li>
+      <li><a href="#s13">13 &nbsp;Security &amp; PII</a></li>
+      <li><span class="grp">Choose &amp; act</span></li>
+      <li><a href="#s14">14 &nbsp;How to select</a></li>
+      <li><a href="#s15">15 &nbsp;Recommendation</a></li>
+      <li><a href="#s16">16 &nbsp;Vendor questions</a></li>
+      <li><a href="#s17">17 &nbsp;90-day plan</a></li>
+      <li><a href="#s18">18 &nbsp;Risks</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <section id="s1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>The decision</h2></div>
+    <div class="prose">
+      <p class="lede">Gyrus is a broker platform built against the Duck&nbsp;Creek API. We want a Snowflake warehouse for reporting. The only unsettled question is how data physically gets from Duck&nbsp;Creek into it.</p>
+      <p>Three routes were raised informally: direct SQL access to their database, direct access to their warehouse, or file exports we load ourselves. Research surfaced two more, one of which is materially better than all three.</p>
+      <p>This document is written to be <em>followed</em>, not just read. &sect;02 explains the Snowflake concepts you need if you have never used it. &sect;04 covers the work that is identical no matter which route wins &mdash; start there. &sect;05 to &sect;09 walk through each route step by step, with every command explained and the failure it prevents named. &sect;14 is the selection framework.</p>
+    </div>
+    <div class="note">
+      <span class="label">Scope</span>
+      <p>Duck&nbsp;Creek data only. Gyrus also holds its own application data &mdash; users, in-progress quotes, journey events, audit trail &mdash; in a database we control outright. That needs nobody&rsquo;s permission and is where &sect;15 says to start.</p>
+    </div>
+  </section>
+
+  <section id="s2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Snowflake in ten minutes</h2></div>
+    <div class="prose">
+      <p class="lede">If you have used Postgres or SQL Server, most of Snowflake is familiar. Four things are not, and every route below depends on them.</p>
+    </div>
+
+    <div class="sub">
+      <h3>2.1 &nbsp;Compute is separate from storage</h3>
+      <div class="prose">
+        <p>In Postgres, the server that stores your data is the same server that runs your queries. Snowflake splits these completely.</p>
+        <p>Your data sits once in cloud object storage, compressed and organised column by column. Queries are executed by a <strong>virtual warehouse</strong> &mdash; an independent compute cluster you start, size, and stop. Several warehouses can read the same tables at the same time with no contention, because none of them owns the data.</p>
+      </div>
+      <div class="note warn">
+        <span class="label">The word that confuses everyone</span>
+        <p>A Snowflake <strong>warehouse is not a database.</strong> It is a compute cluster &mdash; closer to an EC2 auto-scaling group. Data lives in <em>databases</em>; queries are <em>executed by</em> warehouses. When this document says <span class="mono">TRANSFORM_WH</span>, that is CPU, not storage.</p>
+      </div>
+      <div class="prose">
+        <p>Three consequences matter for us:</p>
+      </div>
+      <ul class="tight">
+        <li><strong>You pay per second a warehouse runs</strong>, and nothing when it is suspended. Cost control is mostly about not leaving them running &mdash; hence <span class="mono">AUTO_SUSPEND</span> on everything.</li>
+        <li><strong>Sizes double.</strong> XSMALL &rarr; SMALL &rarr; MEDIUM each doubles compute and hourly cost, but also roughly halves runtime on a big scan &mdash; so cost per query is often similar. A bigger warehouse mainly buys speed.</li>
+        <li><strong>Give each workload its own warehouse.</strong> An analyst&rsquo;s runaway query then cannot slow ingestion, and per-warehouse billing tells you exactly which workload costs what.</li>
+      </ul>
+    </div>
+
+    <div class="sub">
+      <h3>2.2 &nbsp;Permissions attach to roles, never to users</h3>
+      <div class="prose">
+        <p>You do not grant a privilege to a person. You grant it to a <strong>role</strong>, then grant the role to a user. A session activates one role at a time, and roles can be granted to other roles to form a hierarchy.</p>
+        <p>Built-in roles run from <span class="mono">ACCOUNTADMIN</span> (billing, account settings &mdash; use rarely) through <span class="mono">SECURITYADMIN</span> (users and roles) to <span class="mono">SYSADMIN</span> (creates databases, schemas, warehouses &mdash; owns your data objects). We create three custom roles on top: <span class="mono">LOADER</span>, <span class="mono">TRANSFORMER</span>, <span class="mono">ANALYST</span>.</p>
+      </div>
+      <div class="note bad">
+        <span class="label">The grant mistake everyone makes once</span>
+        <p><span class="mono">GRANT SELECT ON ALL TABLES IN SCHEMA &hellip;</span> applies only to tables that <em>exist at the moment you run it</em>. Tables created tomorrow are not covered. You also need <span class="mono">GRANT SELECT ON FUTURE TABLES &hellip;</span>, or every new table is invisible to your analysts and you re-run grants forever without understanding why.</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>2.3 &nbsp;Loading files: four objects that work together</h3>
+      <div class="prose"><p>Routes B and D load files. Snowflake models this with four objects, and understanding how they chain together makes &sect;06 straightforward.</p></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:20%">Object</th><th>What it is</th><th style="width:30%">Analogy</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">STORAGE INTEGRATION</span></td><td>Holds the IAM trust configuration that lets Snowflake read your S3 bucket. No access keys are stored &mdash; it uses role assumption.</td><td>An IAM role binding</td></tr>
+            <tr><td><span class="mono">STAGE</span></td><td>A named pointer to a location files live in. External (your bucket) or internal (Snowflake-managed).</td><td>A mounted volume</td></tr>
+            <tr><td><span class="mono">FILE FORMAT</span></td><td>Every parsing decision in one reusable object: delimiter, quoting, encoding, what counts as null, date format.</td><td>A parser config</td></tr>
+            <tr><td><span class="mono">PIPE</span></td><td>A stored <span class="mono">COPY INTO</span> that fires automatically when a file lands, triggered by a cloud storage event.</td><td>An S3-triggered Lambda</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p>The chain reads: a <strong>storage integration</strong> grants access to the bucket &rarr; a <strong>stage</strong> points at a path inside it &rarr; a <strong>file format</strong> says how to parse what is there &rarr; <span class="mono">COPY INTO</span> loads it, or a <strong>pipe</strong> does that automatically on arrival.</p>
+        <p>One more object matters: a <strong>directory table</strong> on a stage makes the file listing queryable in SQL. That is what lets us detect a file that never arrived (&sect;06, step 8).</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>2.4 &nbsp;Load raw first, transform in SQL (ELT)</h3>
+      <div class="prose">
+        <p>The older pattern, <strong>ETL</strong>, transformed data on a separate machine before loading it, because warehouses were fixed-size appliances whose compute was too scarce to spend on cleaning.</p>
+        <p>Snowflake&rsquo;s compute is elastic and billed per second, so we invert it. <strong>ELT</strong> lands data exactly as it arrives, then transforms it with SQL inside the warehouse. Three schemas result:</p>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:14%">Layer</th><th>Contains</th><th style="width:30%">Rule</th></tr></thead>
+          <tbody>
+            <tr><td><strong>RAW</strong></td><td>Exactly what arrived. Original column names. Text columns where the source is untyped. Provenance on every row.</td><td>Append-only. Never edit, never clean.</td></tr>
+            <tr><td><strong>STAGING</strong></td><td>One view per source object: renamed, typed, deduplicated, deletes filtered, timestamps in UTC.</td><td>No joins, no aggregation, no business logic.</td></tr>
+            <tr><td><strong>MARTS</strong></td><td>Business models &mdash; facts and dimensions the BI tool reads.</td><td>Never read RAW directly; always via STAGING.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p>A useful way to hold it: <strong>RAW is your commit history; STAGING and MARTS are build output.</strong> You would never edit git history to fix a bug &mdash; you fix the code and rebuild. Same here. When a transform turns out to be wrong, you rewrite SQL and rebuild from RAW rather than asking Duck&nbsp;Creek to re-send last March.</p>
+        <p>That last point is why ELT matters more for file and API routes than for database replication: you often <em>cannot</em> re-request the source data, so destroying it during load is unrecoverable.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>What we know, and what we are assuming</h2></div>
+    <div class="prose"><p>Two published facts reshape this decision. Three unknowns gate it.</p></div>
+    <div class="tw">
+      <table>
+        <caption>Public vendor material, August 2026. The Assumed and Unknown rows are what &sect;16 exists to close.</caption>
+        <thead><tr><th style="width:33%">Finding</th><th>Why it matters to us</th><th style="width:14%">Confidence</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Duck&nbsp;Creek Clarity runs on Snowflake.</strong> Clarity is their data and analytics platform; its architecture uses Azure together with the Snowflake Data Cloud.</td><td>Their curated policy, billing and claims data is already in Snowflake. Getting it to us may need no copying at all.</td><td><span class="pill p-g">Published</span></td></tr>
+          <tr><td><strong>Duck&nbsp;Creek and Snowflake are formal partners.</strong> Clarity is marketed as letting insurers securely share data across clouds and geographies.</td><td>Data sharing is an advertised capability of the product, not something we would ask them to invent.</td><td><span class="pill p-g">Published</span></td></tr>
+          <tr><td><strong>Clarity is separately licensed.</strong></td><td>The best technical route may open a commercial conversation. Qualify before designing around it.</td><td><span class="pill p-w">Assumed</span></td></tr>
+          <tr><td><strong>Vendor-hosted SaaS does not expose the operational database.</strong></td><td>Route E is probably unavailable &mdash; but the answer flips entirely if we are self-hosted.</td><td><span class="pill p-w">Assumed</span></td></tr>
+          <tr><td><strong>Our entitlement, region and refresh cadence are undocumented.</strong></td><td>The highest-value unknown. Everything in &sect;05 is conditional on it.</td><td><span class="pill p-b">Unknown</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note warn">
+      <span class="label">Before anyone quotes the first two rows</span>
+      <p>They describe the <em>product</em>, not our contract. They do not establish what we are entitled to, which region serves us, or what a share costs. Treat them as evidence the conversation is worth having &mdash; not as something to plan a delivery date around.</p>
+    </div>
+  </section>
+
+  <section id="s4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Build this first &mdash; it is the same for every route</h2></div>
+    <div class="prose">
+      <p class="lede">The routes differ only in how rows arrive in <span class="mono">RAW</span>. Everything after that is identical, and it is roughly 70&ndash;80% of the total build.</p>
+      <p>This is the most important structural point in the document. The vendor conversation feels like a blocker; it is not. Build the destination now and the day Duck&nbsp;Creek answers, you are wiring a source into a warehouse that already works.</p>
+    </div>
+
+    <div class="flow">
+      <div class="flow-row">
+        <div class="flow-src">
+          <span class="label" style="margin-bottom:2px">Varies &mdash; the open question</span>
+          <div class="src-item q"><span>A &middot; Clarity data share</span><span class="tag">&sect;05</span></div>
+          <div class="src-item q"><span>B &middot; Scheduled extracts</span><span class="tag">&sect;06</span></div>
+          <div class="src-item q"><span>C &middot; Duck Creek API</span><span class="tag">&sect;07</span></div>
+          <div class="src-item q"><span>D &middot; Managed connector</span><span class="tag">&sect;08</span></div>
+          <div class="src-item q"><span>E &middot; Direct database</span><span class="tag">&sect;09</span></div>
+          <div class="src-item"><span>Gyrus app database</span><span class="tag">ours</span></div>
+        </div>
+        <div class="flow-dest">
+          <span class="label" style="margin-bottom:2px">Invariant &mdash; buildable today</span>
+          <div class="dest-stage"><span class="bar"></span><span class="txt"><span class="nm">RAW</span><br><span class="ds">As received. Append-only, text columns, provenance.</span></span></div>
+          <div class="dest-stage"><span class="bar"></span><span class="txt"><span class="nm">STAGING</span><br><span class="ds">One view per object. Typed, deduped, deletes resolved, UTC.</span></span></div>
+          <div class="dest-stage"><span class="bar"></span><span class="txt"><span class="nm">MARTS</span><br><span class="ds">FCT_POLICY_VERSION, DIM_BROKER &hellip; (&sect;11)</span></span></div>
+          <div class="dest-stage"><span class="bar" style="background:var(--rule-strong)"></span><span class="txt"><span class="nm" style="color:var(--muted)">CONSUMPTION</span><br><span class="ds">BI, quality tests, freshness, reconciliation.</span></span></div>
+        </div>
+      </div>
+      <p class="flow-cap">Starting now converts a blocking dependency into a parallel one.</p>
+    </div>
+
+    <div class="steps">
+      <div class="istep">
+        <div class="istep-n">Step 1</div>
+        <div class="istep-b">
+          <h4>Create the database and its five schemas</h4>
+          <p>A Snowflake <em>database</em> is a namespace, not a server. Inside it, <em>schemas</em> group related objects. We use five, and the split is deliberate: one RAW schema per source system so the two never collide, plus an ADMIN schema for the bookkeeping tables that make the pipeline auditable.</p>
+          <div class="code"><div class="cap">Run as SYSADMIN</div><pre><span class="k">USE ROLE</span> SYSADMIN;
+
+<span class="k">CREATE DATABASE IF NOT EXISTS</span> GYRUS_DW;
+
+<span class="k">CREATE SCHEMA IF NOT EXISTS</span> GYRUS_DW.RAW_DUCKCREEK;  <span class="c">-- whichever route wins</span>
+<span class="k">CREATE SCHEMA IF NOT EXISTS</span> GYRUS_DW.RAW_GYRUS;      <span class="c">-- our own app database</span>
+<span class="k">CREATE SCHEMA IF NOT EXISTS</span> GYRUS_DW.STAGING;        <span class="c">-- cleaned views</span>
+<span class="k">CREATE SCHEMA IF NOT EXISTS</span> GYRUS_DW.MARTS;          <span class="c">-- business models</span>
+<span class="k">CREATE SCHEMA IF NOT EXISTS</span> GYRUS_DW.ADMIN;          <span class="c">-- manifests, calendars, controls</span></pre></div>
+          <p class="why"><strong>Why two RAW schemas.</strong> Both systems will have a table called something like <span class="mono">POLICY</span>. Separate schemas mean no collision, and it stays obvious at a glance which system any table came from &mdash; which matters enormously when a number looks wrong and you are tracing it back.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="istep-n">Step 2</div>
+        <div class="istep-b">
+          <h4>Create three warehouses, one per workload</h4>
+          <p>Remember from &sect;2.1 that a warehouse is compute. We create three so the workloads cannot interfere with each other, and so the bill tells us which one costs what.</p>
+          <div class="code"><div class="cap">Compute</div><pre><span class="k">CREATE WAREHOUSE IF NOT EXISTS</span> LOAD_WH
+  WAREHOUSE_SIZE = <span class="k">'XSMALL'</span>  <span class="c">-- ingestion is I/O bound, not CPU bound</span>
+  AUTO_SUSPEND   = 60         <span class="c">-- suspend after 60s idle</span>
+  AUTO_RESUME    = TRUE       <span class="c">-- wake automatically on next query</span>
+  INITIALLY_SUSPENDED = TRUE; <span class="c">-- do not start billing on creation</span>
+
+<span class="k">CREATE WAREHOUSE IF NOT EXISTS</span> TRANSFORM_WH
+  WAREHOUSE_SIZE = <span class="k">'SMALL'</span>   <span class="c">-- joins and aggregates need more</span>
+  AUTO_SUSPEND = 60 AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE;
+
+<span class="k">CREATE WAREHOUSE IF NOT EXISTS</span> BI_WH
+  WAREHOUSE_SIZE = <span class="k">'SMALL'</span>
+  AUTO_SUSPEND = 300          <span class="c">-- longer: analysts query in bursts</span>
+  AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE;</pre></div>
+          <p class="why"><strong>Why the different <span class="mono">AUTO_SUSPEND</span> values.</strong> 60 seconds suits scheduled jobs that run and finish. 300 suits interactive use, where a 60-second suspend means an analyst pauses to think and pays a cold start when they resume. Going below 60 anywhere causes repeated cold starts that cost more than the idle time saved.</p>
+          <p class="why bad"><strong>If you skip <span class="mono">INITIALLY_SUSPENDED</span></strong> the warehouse starts running the moment it is created and bills until something suspends it. On a Friday afternoon that is a whole weekend of compute for nothing.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="istep-n">Step 3</div>
+        <div class="istep-b">
+          <h4>Set Time Travel retention deliberately</h4>
+          <p>Time Travel lets you query a table as it was N days ago. It is billed, because Snowflake keeps the old versions. The right retention differs by layer.</p>
+          <div class="code"><div class="cap">Retention</div><pre><span class="k">ALTER SCHEMA</span> GYRUS_DW.RAW_DUCKCREEK <span class="k">SET</span> DATA_RETENTION_TIME_IN_DAYS = 1;
+<span class="k">ALTER SCHEMA</span> GYRUS_DW.MARTS          <span class="k">SET</span> DATA_RETENTION_TIME_IN_DAYS = 7;</pre></div>
+          <p class="why"><strong>Why RAW gets only one day.</strong> RAW is a replica of something that exists elsewhere &mdash; the source system, or the file archive in S3. If we lose it we reload it. MARTS gets seven days because rebuilding derived models takes compute and someone&rsquo;s afternoon.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="istep-n">Step 4</div>
+        <div class="istep-b">
+          <h4>Create roles and grant privileges &mdash; including FUTURE</h4>
+          <p>Three roles matching the three layers. <span class="mono">LOADER</span> writes RAW. <span class="mono">TRANSFORMER</span> reads RAW and owns STAGING and MARTS. <span class="mono">ANALYST</span> reads MARTS only.</p>
+          <div class="code"><div class="cap">Roles and grants</div><pre><span class="k">USE ROLE</span> USERADMIN;
+<span class="k">CREATE ROLE IF NOT EXISTS</span> LOADER;
+<span class="k">CREATE ROLE IF NOT EXISTS</span> TRANSFORMER;
+<span class="k">CREATE ROLE IF NOT EXISTS</span> ANALYST;
+
+<span class="k">USE ROLE</span> SECURITYADMIN;
+<span class="c">-- Grant to SYSADMIN so administrators inherit everything below</span>
+<span class="k">GRANT ROLE</span> LOADER      <span class="k">TO ROLE</span> SYSADMIN;
+<span class="k">GRANT ROLE</span> TRANSFORMER <span class="k">TO ROLE</span> SYSADMIN;
+<span class="k">GRANT ROLE</span> ANALYST     <span class="k">TO ROLE</span> SYSADMIN;
+
+<span class="k">USE ROLE</span> SYSADMIN;
+
+<span class="c">-- TRANSFORMER: read everything, own the modelling layers</span>
+<span class="k">GRANT USAGE</span>  <span class="k">ON DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT USAGE</span>  <span class="k">ON ALL SCHEMAS    IN DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT USAGE</span>  <span class="k">ON FUTURE SCHEMAS IN DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT SELECT</span> <span class="k">ON ALL TABLES     IN DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT SELECT</span> <span class="k">ON FUTURE TABLES  IN DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT ALL</span>    <span class="k">ON SCHEMA</span> GYRUS_DW.STAGING <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT ALL</span>    <span class="k">ON SCHEMA</span> GYRUS_DW.MARTS   <span class="k">TO ROLE</span> TRANSFORMER;
+<span class="k">GRANT USAGE</span>  <span class="k">ON WAREHOUSE</span> TRANSFORM_WH <span class="k">TO ROLE</span> TRANSFORMER;
+
+<span class="c">-- ANALYST: read-only on the business layer</span>
+<span class="k">GRANT USAGE</span>  <span class="k">ON DATABASE</span> GYRUS_DW <span class="k">TO ROLE</span> ANALYST;
+<span class="k">GRANT USAGE</span>  <span class="k">ON SCHEMA</span> GYRUS_DW.MARTS <span class="k">TO ROLE</span> ANALYST;
+<span class="k">GRANT SELECT</span> <span class="k">ON ALL TABLES    IN SCHEMA</span> GYRUS_DW.MARTS <span class="k">TO ROLE</span> ANALYST;
+<span class="k">GRANT SELECT</span> <span class="k">ON FUTURE TABLES IN SCHEMA</span> GYRUS_DW.MARTS <span class="k">TO ROLE</span> ANALYST;
+<span class="k">GRANT SELECT</span> <span class="k">ON FUTURE VIEWS  IN SCHEMA</span> GYRUS_DW.MARTS <span class="k">TO ROLE</span> ANALYST;
+<span class="k">GRANT USAGE</span>  <span class="k">ON WAREHOUSE</span> BI_WH <span class="k">TO ROLE</span> ANALYST;</pre></div>
+          <p class="why"><strong>Note the role switching.</strong> <span class="mono">USERADMIN</span> creates roles, <span class="mono">SECURITYADMIN</span> grants roles to roles, <span class="mono">SYSADMIN</span> grants privileges on objects it owns. Running all of this as <span class="mono">ACCOUNTADMIN</span> appears to work but creates objects owned by the wrong role, which causes confusing permission failures weeks later.</p>
+          <p class="why bad"><strong>The <span class="mono">FUTURE</span> lines are not optional.</strong> Without them, every table created after today is invisible to <span class="mono">TRANSFORMER</span> and <span class="mono">ANALYST</span>. The symptom is baffling: the table plainly exists, but the analyst gets &ldquo;object does not exist or not authorized&rdquo;.</p>
+        </div>
+      </div>
+
+      <div class="istep">
+        <div class="istep-n">Step 5</div>
+        <div class="istep-b">
+          <h4>Verify before moving on</h4>
+          <p>Two minutes now saves an afternoon later.</p>
+          <div class="code"><div class="cap">Checks</div><pre><span class="c">-- Are the schemas there?</span>
+<span class="k">SHOW SCHEMAS IN DATABASE</span> GYRUS_DW;
+
+<span class="c">-- Are the warehouses suspended (not burning credits)?</span>
+<span class="k">SHOW WAREHOUSES</span>;   <span class="c">-- state column should read SUSPENDED</span>
+
+<span class="c">-- Can TRANSFORMER actually do its job?</span>
+<span class="k">USE ROLE</span> TRANSFORMER;
+<span class="k">USE WAREHOUSE</span> TRANSFORM_WH;
+<span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.STAGING.V_SMOKE_TEST <span class="k">AS SELECT</span> 1 <span class="k">AS</span> ok;
+<span class="k">SELECT</span> * <span class="k">FROM</span> GYRUS_DW.STAGING.V_SMOKE_TEST;
+<span class="k">DROP VIEW</span> GYRUS_DW.STAGING.V_SMOKE_TEST;</pre></div>
+          <p class="why good"><strong>If all three pass</strong>, the foundation is sound and every route below plugs into it. This is also the point at which you can start &sect;09 against the Gyrus application database without waiting for anyone.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>4.6 &nbsp;The staging pattern you will repeat for every table</h3>
+      <div class="prose">
+        <p>This shape recurs for every source object regardless of route. Read it once carefully &mdash; later sections refer back to it rather than repeating it.</p>
+        <p>It has four jobs: pick one winning row per key, cast text into real types safely, clean the values, and drop rows that should not be there.</p>
+      </div>
+      <div class="code"><div class="cap">The canonical staging view</div><pre><span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.STAGING.STG_POLICY <span class="k">AS</span>
+<span class="k">SELECT</span>
+    <span class="k">TRIM</span>(policy_id)                              <span class="k">AS</span> policy_id,
+    <span class="k">UPPER</span>(<span class="k">TRIM</span>(broker_ref))                      <span class="k">AS</span> broker_ref,
+    <span class="k">UPPER</span>(<span class="k">TRIM</span>(status))                          <span class="k">AS</span> policy_status,
+
+    <span class="k">TRY_TO_NUMBER</span>(
+      <span class="k">REPLACE</span>(<span class="k">REPLACE</span>(<span class="k">TRIM</span>(gross_premium), <span class="k">','</span>, <span class="k">''</span>), <span class="k">'$'</span>, <span class="k">''</span>)
+    , 18, 2)                                    <span class="k">AS</span> gross_premium,
+
+    <span class="k">TRY_TO_DATE</span>(<span class="k">TRIM</span>(effective_date), <span class="k">'YYYY-MM-DD'</span>) <span class="k">AS</span> effective_date,
+    <span class="k">CONVERT_TIMEZONE</span>(<span class="k">'UTC'</span>, updated_at)          <span class="k">AS</span> updated_at_utc,
+
+    _source_ref, _load_ts                       <span class="c">-- provenance, always carried</span>
+<span class="k">FROM</span> GYRUS_DW.RAW_DUCKCREEK.POLICY
+<span class="k">WHERE</span> <span class="k">TRIM</span>(<span class="k">COALESCE</span>(policy_id, <span class="k">''</span>)) &lt;&gt; <span class="k">''</span>
+<span class="k">QUALIFY</span> <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (
+    <span class="k">PARTITION BY</span> <span class="k">TRIM</span>(policy_id)
+    <span class="k">ORDER BY</span> _load_ts <span class="k">DESC</span>) = 1;</pre></div>
+      <div class="prose"><p>Four decisions in that view are load-bearing. Each exists because its absence produces <em>wrong numbers rather than an error</em>, which is the hardest class of bug to find.</p></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:24%">Decision</th><th>What it does</th><th style="width:32%">What happens without it</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">TRY_TO_NUMBER</span><br><span class="mono">TRY_TO_DATE</span></td><td>Returns <span class="mono">NULL</span> when a value cannot be converted, instead of raising an error.</td><td>The bare <span class="mono">TO_NUMBER</span> aborts the whole query on one bad cell. A single <span class="mono">"N/A"</span> in a premium column breaks every report.</td></tr>
+            <tr><td><span class="mono">QUALIFY ROW_NUMBER()</span></td><td>Keeps only the newest row per key. Filters on a window function without needing a subquery.</td><td>Re-delivered files, replayed API pages and reloaded extracts all duplicate. Totals silently double.</td></tr>
+            <tr><td><span class="mono">TRIM</span> and <span class="mono">UPPER</span></td><td>Normalises whitespace and case on keys and codes.</td><td>Source systems are often case-insensitive; Snowflake is not. Joins miss rows and report success.</td></tr>
+            <tr><td><span class="mono">CONVERT_TIMEZONE</span></td><td>Forces every timestamp to UTC, with the column named to say so.</td><td>Figures that are correct but land in the wrong day at month and financial-year boundaries.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note">
+        <span class="label">One line is missing on purpose</span>
+        <p>There is no delete filter in that view yet, because what belongs there depends on which route wins. &sect;10 explains how to determine it empirically and what to add. Do not model anything downstream until that is settled.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Route A &mdash; Snowflake data share from Clarity</h2></div>
+    <div class="opt-head">
+      <div class="opt-id"><span class="rank">A</span><div>
+        <h3 class="opt-name">They grant, we query. Nothing moves.</h3>
+        <p class="opt-sub">Duck Creek gives our Snowflake account read access to Clarity objects in theirs.</p>
+      </div></div>
+      <span class="verdict v-best">Pursue first</span>
+    </div>
+    <div class="scorerow">
+      <div class="score"><div class="score-top"><span class="score-nm">Speed</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Completeness</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Freshness</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Build effort</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Ops burden</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Independence</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+    </div>
+
+    <div class="sub">
+      <h3>5.1 &nbsp;What data sharing actually is</h3>
+      <div class="prose">
+        <p>This is the concept most people have not met before, so it is worth being precise.</p>
+        <p>In Snowflake, a <strong>share</strong> is an object a provider account creates that names some tables and views, plus a list of consumer accounts allowed to read them. When a consumer mounts a share, Snowflake creates a read-only database in the consumer&rsquo;s account that <em>points at the provider&rsquo;s storage</em>. No bytes are copied. No pipeline runs. No schedule exists.</p>
+        <p>Your queries run on <em>your</em> warehouse (so you pay the compute), against <em>their</em> storage (so they pay the storage). When they update a row, your next query sees it &mdash; because there is only one copy and you are reading it directly.</p>
+      </div>
+      <div class="prose">
+        <p>Two conditions must hold. Both are Q2 and Q3 in &sect;16:</p>
+      </div>
+      <ul class="tight">
+        <li>Duck&nbsp;Creek must be willing to create the share and add our account to it &mdash; a product and contract question, not a technical one.</li>
+        <li>Both accounts must be in the <strong>same cloud region</strong>. If not, the provider has to replicate the data to our region first, which costs them money and requires their agreement.</li>
+      </ul>
+    </div>
+
+    <div class="sub">
+      <h3>5.2 &nbsp;Implementation, step by step</h3>
+      <div class="steps">
+        <div class="istep">
+          <div class="istep-n">Step 1</div>
+          <div class="istep-b">
+            <h4>Give Duck Creek our account identifier</h4>
+            <p>They need to know which account to add to the share. Send them the value below, not the browser URL &mdash; the URL is not always the identifier and this is a common source of a wasted round trip.</p>
+            <div class="code"><div class="cap">Find our identifier</div><pre><span class="k">SELECT</span> <span class="k">CURRENT_ORGANIZATION_NAME</span>() <span class="k">AS</span> org,
+       <span class="k">CURRENT_ACCOUNT_NAME</span>()      <span class="k">AS</span> account,
+       <span class="k">CURRENT_REGION</span>()            <span class="k">AS</span> region;</pre></div>
+            <p class="why"><strong>Send the region too.</strong> It lets them tell you immediately whether replication is needed, rather than discovering it after provisioning.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 2</div>
+          <div class="istep-b">
+            <h4>Confirm the share has arrived</h4>
+            <p>Once they add us, the share appears in our account automatically. Nothing needs installing.</p>
+            <div class="code"><div class="cap">Inspect the inbound share</div><pre><span class="k">USE ROLE</span> ACCOUNTADMIN;   <span class="c">-- or any role holding IMPORT SHARE</span>
+
+<span class="k">SHOW SHARES</span>;              <span class="c">-- kind = INBOUND is one offered to us</span>
+
+<span class="c">-- What is actually in it? Do this before mounting.</span>
+<span class="k">DESC SHARE</span> DUCKCREEK_ACCT.CLARITY_SHARE;</pre></div>
+            <p class="why"><strong><span class="mono">DESC SHARE</span> lists every object the share exposes.</strong> Check it against the entity list from Q4 before going further &mdash; if a table you need for &sect;11 is missing, that is a conversation to have now, not after you have built models on top.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 3</div>
+          <div class="istep-b">
+            <h4>Mount the share as a database</h4>
+            <p>One statement. This is the entire ingestion build for this route.</p>
+            <div class="code"><div class="cap">Mount and grant</div><pre><span class="k">CREATE DATABASE</span> DUCKCREEK_CLARITY
+  <span class="k">FROM SHARE</span> DUCKCREEK_ACCT.CLARITY_SHARE;
+
+<span class="c">-- Shared databases use IMPORTED PRIVILEGES, not the usual GRANT SELECT</span>
+<span class="k">GRANT IMPORTED PRIVILEGES</span> <span class="k">ON DATABASE</span> DUCKCREEK_CLARITY <span class="k">TO ROLE</span> TRANSFORMER;
+
+<span class="k">SELECT</span> <span class="k">COUNT</span>(*) <span class="k">FROM</span> DUCKCREEK_CLARITY.PUBLIC.POLICY;   <span class="c">-- it just works</span></pre></div>
+            <p class="why"><strong><span class="mono">IMPORTED PRIVILEGES</span> is the part people get wrong.</strong> You cannot <span class="mono">GRANT SELECT ON &hellip;</span> individual shared tables &mdash; the provider owns them. You grant the imported privileges on the whole shared database instead, and access to individual objects follows from what the provider put in the share.</p>
+            <p class="why good"><strong>Compare with Route B</strong>, which needs a bucket, an IAM trust relationship, a storage integration, a file format, a stage, a pipe, an event notification, a manifest table, a calendar table and four monitoring views before a single row lands.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 4</div>
+          <div class="istep-b">
+            <h4>Build staging views on top &mdash; exactly as in &sect;4.6</h4>
+            <p>From here nothing is special. The shared database behaves like any other source for reading purposes.</p>
+            <div class="code"><div class="cap">Staging over shared data</div><pre><span class="k">USE ROLE</span> TRANSFORMER;
+
+<span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.STAGING.STG_POLICY <span class="k">AS</span>
+<span class="k">SELECT</span>
+    <span class="k">TRIM</span>(policy_id)                      <span class="k">AS</span> policy_id,
+    <span class="k">UPPER</span>(<span class="k">TRIM</span>(broker_ref))              <span class="k">AS</span> broker_ref,
+    <span class="k">UPPER</span>(<span class="k">TRIM</span>(status))                  <span class="k">AS</span> policy_status,
+    gross_premium,                          <span class="c">-- already typed by Clarity</span>
+    <span class="k">CONVERT_TIMEZONE</span>(<span class="k">'UTC'</span>, updated_at)  <span class="k">AS</span> updated_at_utc
+<span class="k">FROM</span> DUCKCREEK_CLARITY.PUBLIC.POLICY;</pre></div>
+            <p class="why"><strong>This staging view is much thinner than the file-route equivalent</strong>, and that is a real advantage of Route A. Clarity data is already typed and modelled for insurance, so there is no text-to-number casting, no total-row filtering, and no deduplication to do &mdash; the provider has done it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>5.3 &nbsp;The constraints that bite &mdash; read before designing</h3>
+      <div class="prose">
+        <p>Shared objects are not ordinary tables, and several limitations only surface once you build on them. None is a reason to reject the route; all of them shape the design.</p>
+      </div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:25%">Constraint</th><th>What it means in practice</th><th style="width:30%">What to do about it</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Read-only, no DDL</strong></td><td>You cannot add a column, an index, or even a comment to a shared table.</td><td>All modelling happens in your own STAGING views. This is what you would do anyway.</td></tr>
+            <tr><td><strong>Cannot be cloned</strong></td><td><span class="mono">CREATE DATABASE dev CLONE &hellip;</span> fails, so the usual free dev-environment trick is unavailable for this data.</td><td>Materialise a sampled subset into your own schema for development.</td></tr>
+            <tr><td><strong>No Time Travel for the consumer</strong></td><td>You cannot query the share as at last Tuesday. If the provider overwrites a row, the old value is gone from your perspective.</td><td>If point-in-time history matters &mdash; and in insurance it usually does &mdash; snapshot locally (step below).</td></tr>
+            <tr><td><strong>Incremental refresh depends on <em>their</em> change tracking</strong></td><td>A dynamic table built on shared data may fall back to <strong>full refresh</strong> on every cycle, which changes the cost profile substantially on large tables.</td><td><strong>Ask Q5.</strong> If unavailable, refresh incrementally against an update timestamp instead.</td></tr>
+            <tr><td><strong>Same-region requirement</strong></td><td>Cross-region sharing needs the provider to replicate, adding their cost and some latency.</td><td>Ask Q3 <em>before</em> provisioning our account, then place ours in their region.</td></tr>
+            <tr><td><strong>Access is revocable instantly</strong></td><td>A contract lapse or dispute removes our warehouse&rsquo;s data with no local copy remaining.</td><td>Treat the local snapshot as business continuity, not a technical nicety.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="code"><div class="cap">Optional local snapshot &mdash; buys history, cloning and continuity</div><pre><span class="k">CREATE OR REPLACE TASK</span> GYRUS_DW.ADMIN.SNAPSHOT_CLARITY
+  WAREHOUSE = TRANSFORM_WH
+  SCHEDULE  = <span class="k">'USING CRON 0 2 * * * Australia/Sydney'</span>   <span class="c">-- 02:00 daily</span>
+<span class="k">AS</span>
+<span class="k">INSERT INTO</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_SNAPSHOT
+<span class="k">SELECT</span> *, <span class="k">CURRENT_DATE</span>() <span class="k">AS</span> snapshot_date
+<span class="k">FROM</span> DUCKCREEK_CLARITY.PUBLIC.POLICY;
+
+<span class="k">ALTER TASK</span> GYRUS_DW.ADMIN.SNAPSHOT_CLARITY <span class="k">RESUME</span>;   <span class="c">-- tasks start SUSPENDED</span></pre></div>
+      <div class="note">
+        <span class="label">A design call to make early, not late</span>
+        <p>Pure sharing is cheapest and simplest. Sharing <em>plus</em> a nightly snapshot costs storage but restores Time Travel, cloning, point-in-time history, and a copy that survives revocation. For a regulated insurance dataset the snapshot is probably worth its cost &mdash; but decide deliberately rather than discovering the gap during an audit.</p>
+      </div>
+      <div class="note warn">
+        <span class="label">Remember this line</span>
+        <p><span class="mono">ALTER TASK &hellip; RESUME</span>. Every task in Snowflake is created suspended. Forgetting it is the single most common cause of &ldquo;the pipeline is not running and there is no error anywhere&rdquo;.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Route B &mdash; scheduled extracts into cloud storage</h2></div>
+    <div class="opt-head">
+      <div class="opt-id"><span class="rank">B</span><div>
+        <h3 class="opt-name">They drop files in our bucket, Snowflake loads them</h3>
+        <p class="opt-sub">The most widely supported pattern in enterprise insurance software, and the likeliest to be available whatever our licensing says.</p>
+      </div></div>
+      <span class="verdict v-fall">Primary fallback</span>
+    </div>
+    <div class="scorerow">
+      <div class="score"><div class="score-top"><span class="score-nm">Speed</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Completeness</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Freshness</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Build effort</span><span class="score-vl">3/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Ops burden</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Independence</span><span class="score-vl">4/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+    </div>
+
+    <div class="sub">
+      <h3>6.1 &nbsp;What you are building, in plain terms</h3>
+      <div class="prose">
+        <p>Duck&nbsp;Creek runs a scheduled export and writes a file to a bucket we own. The moment the file lands, S3 sends an event to Snowflake, and Snowflake loads it. Nobody presses anything.</p>
+        <p>The build has three parts, and it is worth holding them separately in your head:</p>
+      </div>
+      <ul class="tight">
+        <li><strong>The landing zone</strong> &mdash; a bucket with three folders and a lifecycle policy (steps 1&ndash;2).</li>
+        <li><strong>The load path</strong> &mdash; integration, format, stage, table, pipe (steps 3&ndash;7).</li>
+        <li><strong>The control plane</strong> &mdash; manifest, calendar, reconciliation, alerting (step 8). This is the part teams skip, and it is the part that makes the difference between a pipeline and a script.</li>
+      </ul>
+      <div class="note warn">
+        <span class="label">The thing to understand before you start</span>
+        <p>A file export gives you a <strong>snapshot</strong>, not a change stream. It tells you what the data looked like at export time, never what changed. That has two consequences that shape everything below: <strong>deletes are invisible</strong> (&sect;10), and <strong>a file that never arrives looks exactly like a normal day</strong> &mdash; the dashboard renders, the query succeeds, and the numbers are simply yesterday&rsquo;s.</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>6.2 &nbsp;Implementation, step by step</h3>
+      <div class="steps">
+
+        <div class="istep">
+          <div class="istep-n">Step 1</div>
+          <div class="istep-b">
+            <h4>Agree the data contract before writing any code</h4>
+            <p>This is the highest-value hour in the whole route, and the one most often skipped. With a database, the schema <em>is</em> the contract and the engine enforces it. With files, nothing enforces anything unless it is written down and agreed.</p>
+            <p>Get a one-page agreement per report covering: delivery schedule and time, exact bucket path, format and encoding, header row, grain (one row per what?), whether it is a full snapshot or a delta, date format, decimal separator, how nulls are written, the filename convention, control totals, the restatement policy, and how much notice we get before a column changes.</p>
+            <div class="code"><div class="cap">The filename convention &mdash; do not negotiate this away</div><pre>policy_20260824_070500.csv
+│      │        │
+│      │        └── export time — resolves ordering and re-issues
+│      └─────────── business date the data represents
+└────────────────── report identity</pre></div>
+            <p class="why"><strong>Why the filename matters so much.</strong> It is the only metadata we control without opening the file. It gives us identity, period and version &mdash; which is what makes &ldquo;a corrected file arrived, which one wins?&rdquo; answerable in SQL rather than by a human.</p>
+            <p class="why good"><strong>Push hardest for two things:</strong> CSV or Parquet rather than Excel, and <strong>control totals</strong> &mdash; a row count and key column sums delivered alongside each file. Control totals are the difference between hoping a load worked and knowing it did.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 2</div>
+          <div class="istep-b">
+            <h4>Build the landing zone</h4>
+            <p>Three folders, three states. This separation is what makes the pipeline debuggable when something breaks at 2am.</p>
+            <div class="code"><div class="cap">Bucket layout and policy</div><pre>s3://gyrus-dc-landing/
+├── inbound/policy/      policy_20260824_070500.csv   <span class="c"># evidence — immutable</span>
+├── normalised/policy/   policy_20260824_070500.parquet <span class="c"># derived — regenerable</span>
+└── rejected/policy/                                  <span class="c"># failed — needs a human</span>
+
+<span class="c"># Versioning ON, SSE encryption, public access blocked</span>
+<span class="c"># Lifecycle: STANDARD_IA at 90d, GLACIER at 365d — and NO expiration rule</span>
+<span class="c"># Producer IAM policy: s3:PutObject on inbound/* ONLY. No read. No delete.</span></pre></div>
+            <p class="why"><strong>Write-only producer credentials</strong> mean a mistake on Duck&nbsp;Creek&rsquo;s side cannot destroy our history. They can add files; they cannot overwrite or remove them.</p>
+            <p class="why"><strong>No expiration rule, deliberately.</strong> Storage is cheap. A lost source file is unrecoverable &mdash; you cannot ask a vendor to re-run last March&rsquo;s export and expect the same numbers. Treat every landed file as evidence you may need in a dispute two years from now.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 3</div>
+          <div class="istep-b">
+            <h4>Let Snowflake read the bucket</h4>
+            <p>A storage integration holds the IAM trust configuration. It is a two-sided handshake: you create it in Snowflake, read two generated values out of it, and paste those into the AWS role&rsquo;s trust policy.</p>
+            <div class="code"><div class="cap">Snowflake side</div><pre><span class="k">USE ROLE</span> ACCOUNTADMIN;
+
+<span class="k">CREATE OR REPLACE STORAGE INTEGRATION</span> s3_dc_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = <span class="k">'S3'</span>
+  ENABLED = TRUE
+  STORAGE_AWS_ROLE_ARN = <span class="k">'arn:aws:iam::&lt;acct&gt;:role/snowflake-gyrus-role'</span>
+  STORAGE_ALLOWED_LOCATIONS = (<span class="k">'s3://gyrus-dc-landing/'</span>);
+
+<span class="c">-- Copy STORAGE_AWS_IAM_USER_ARN and STORAGE_AWS_EXTERNAL_ID from this output</span>
+<span class="k">DESC INTEGRATION</span> s3_dc_int;
+
+<span class="k">GRANT USAGE</span> <span class="k">ON INTEGRATION</span> s3_dc_int <span class="k">TO ROLE</span> LOADER;</pre></div>
+            <p>Then on the AWS side, the role&rsquo;s trust policy allows that IAM user to assume it, conditioned on that external ID:</p>
+            <div class="code"><div class="cap">AWS trust policy</div><pre>{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "AWS": "&lt;STORAGE_AWS_IAM_USER_ARN&gt;" },
+    "Action": "sts:AssumeRole",
+    "Condition": {
+      "StringEquals": { "sts:ExternalId": "&lt;STORAGE_AWS_EXTERNAL_ID&gt;" }
+    }
+  }]
+}</pre></div>
+            <p class="why good"><strong>Why this rather than access keys.</strong> No AWS secret ever enters Snowflake. Access is granted by role assumption and can be revoked entirely from the AWS side, without touching Snowflake.</p>
+            <p class="why bad"><strong>If <span class="mono">LIST</span> later returns nothing</strong>, the cause is almost always here: the external ID was regenerated (it changes if you recreate the integration), or the allowed-locations prefix does not match the bucket path.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 4</div>
+          <div class="istep-b">
+            <h4>Define how to parse the files</h4>
+            <p>A file format object captures every parsing decision once. Most CSV pain is solved here, so it is worth understanding each option rather than copying the block.</p>
+            <div class="code"><div class="cap">File format</div><pre><span class="k">USE ROLE</span> LOADER;
+
+<span class="k">CREATE OR REPLACE FILE FORMAT</span> GYRUS_DW.RAW_DUCKCREEK.ff_dc_csv
+  TYPE = CSV
+  PARSE_HEADER = TRUE
+  FIELD_DELIMITER = <span class="k">','</span>
+  FIELD_OPTIONALLY_ENCLOSED_BY = <span class="k">'"'</span>
+  TRIM_SPACE = TRUE
+  ENCODING = <span class="k">'UTF8'</span>
+  NULL_IF = (<span class="k">''</span>, <span class="k">'NULL'</span>, <span class="k">'null'</span>, <span class="k">'N/A'</span>, <span class="k">'#N/A'</span>, <span class="k">'#REF!'</span>, <span class="k">'#DIV/0!'</span>, <span class="k">'-'</span>)
+  EMPTY_FIELD_AS_NULL = TRUE
+  REPLACE_INVALID_CHARACTERS = TRUE
+  ESCAPE_UNENCLOSED_FIELD = NONE;</pre></div>
+            <div class="tw">
+              <table>
+                <thead><tr><th style="width:32%">Option</th><th>Why it is set that way</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="mono">PARSE_HEADER = TRUE</span></td><td>Reads column names from row 1, which is what enables name-based loading in step 6. <strong>Cannot be combined with <span class="mono">SKIP_HEADER</span></strong> &mdash; setting both is an error.</td></tr>
+                  <tr><td><span class="mono">FIELD_OPTIONALLY_ENCLOSED_BY</span></td><td>Without it, one comma inside a value &mdash; a company name, an address &mdash; shifts every subsequent field on that row. Also handles newlines inside quoted fields.</td></tr>
+                  <tr><td><span class="mono">NULL_IF</span></td><td>Turns spreadsheet placeholders and formula errors into real nulls. Without it, <span class="mono">#DIV/0!</span> is stored as literal text in a premium column.</td></tr>
+                  <tr><td><span class="mono">TRIM_SPACE</span></td><td>Removes trailing spaces that fixed-width exports add. <span class="mono">'ACTIVE&nbsp;&nbsp;&nbsp;'</span> does not equal <span class="mono">'ACTIVE'</span>.</td></tr>
+                  <tr><td><span class="mono">REPLACE_INVALID_CHARACTERS</span></td><td>One bad byte replaces a character rather than failing the whole file.</td></tr>
+                  <tr><td><span class="mono">ESCAPE_UNENCLOSED_FIELD = NONE</span></td><td>Stops backslashes in data being interpreted as escape sequences &mdash; a surprise that corrupts address and reference fields.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 5</div>
+          <div class="istep-b">
+            <h4>Create the stage, then look at a real file</h4>
+            <p>The stage points at the bucket. <span class="mono">DIRECTORY = (ENABLE = TRUE)</span> makes the file listing queryable in SQL, which step 8 depends on.</p>
+            <div class="code"><div class="cap">Stage and inspection</div><pre><span class="k">CREATE OR REPLACE STAGE</span> GYRUS_DW.RAW_DUCKCREEK.stg_dc
+  URL = <span class="k">'s3://gyrus-dc-landing/'</span>
+  STORAGE_INTEGRATION = s3_dc_int
+  FILE_FORMAT = ff_dc_csv
+  DIRECTORY = (ENABLE = TRUE AUTO_REFRESH = TRUE);
+
+<span class="c">-- Can we see files at all? If this is empty, revisit step 3.</span>
+<span class="k">LIST</span> @stg_dc/inbound/policy/;
+
+<span class="c">-- What does the parser actually see? Query the file WITHOUT loading it.</span>
+<span class="k">SELECT</span> $1, $2, $3, $4 <span class="k">FROM</span> @stg_dc/inbound/policy/policy_20260824_070500.csv
+  (FILE_FORMAT =&gt; <span class="k">'ff_dc_csv'</span>) <span class="k">LIMIT</span> 10;
+
+<span class="c">-- Let Snowflake guess the schema — then review the guesses by hand.</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> <span class="k">TABLE</span>(<span class="k">INFER_SCHEMA</span>(
+  LOCATION =&gt; <span class="k">'@stg_dc/inbound/policy/'</span>, FILE_FORMAT =&gt; <span class="k">'ff_dc_csv'</span>));</pre></div>
+            <p class="why"><strong>Always inspect before loading a new report.</strong> Every assumption you have about the format will be wrong in some way only a real file reveals &mdash; a title row above the header, a total row at the bottom, a date written three different ways.</p>
+            <p class="why bad"><strong>Do not trust <span class="mono">INFER_SCHEMA</span> blindly.</strong> It will happily type a policy reference with leading zeros as a <span class="mono">NUMBER</span>, destroying the zeros, or pick a numeric precision that overflows next quarter. Use it as a draft, not an answer.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 6</div>
+          <div class="istep-b">
+            <h4>Create the RAW table &mdash; every business column as text</h4>
+            <p>This looks wrong the first time you see it. It is the single most useful convention in file-based ingestion.</p>
+            <div class="code"><div class="cap">RAW table</div><pre><span class="k">CREATE OR REPLACE TABLE</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT (
+    policy_id            <span class="k">VARCHAR</span>,     <span class="c">-- named exactly as the file header</span>
+    broker_ref           <span class="k">VARCHAR</span>,
+    status               <span class="k">VARCHAR</span>,
+    gross_premium        <span class="k">VARCHAR</span>,     <span class="c">-- yes, text</span>
+    effective_date       <span class="k">VARCHAR</span>,     <span class="c">-- yes, text</span>
+
+    _file_name           <span class="k">VARCHAR</span>,     <span class="c">-- provenance: which file</span>
+    _file_row_number     <span class="k">NUMBER</span>,      <span class="c">-- which line in it</span>
+    _file_last_modified  <span class="k">TIMESTAMP_NTZ</span>,
+    _load_ts             <span class="k">TIMESTAMP_LTZ</span> <span class="c">-- when we loaded it</span>
+);</pre></div>
+            <p class="why"><strong>Why text.</strong> A typed column fails the <em>entire file</em> on one bad value. One <span class="mono">"N/A"</span> in a premium field, one <span class="mono">"31/02/2026"</span>, and the whole day&rsquo;s load aborts &mdash; usually overnight, usually discovered by an analyst the next morning.</p>
+            <p class="why good"><strong>As text, the load always succeeds.</strong> Bad values become an isolated, queryable data-quality finding (step 8) that you can send back to Duck&nbsp;Creek with the exact file and line number, while the other 99.9% of the data is available for reporting.</p>
+            <p class="why"><strong>The provenance columns are not optional.</strong> They are what make the warehouse auditable, and step 8&rsquo;s deduplication and reconciliation both depend on them.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 7</div>
+          <div class="istep-b">
+            <h4>Load once by hand, then automate with a pipe</h4>
+            <p>Get a manual load working before creating a pipe. Debugging <span class="mono">COPY INTO</span> interactively is far easier than debugging something that runs on an event you cannot trigger at will.</p>
+            <div class="code"><div class="cap">Manual load</div><pre><span class="c">-- Dry run first: parses and reports errors, writes nothing</span>
+<span class="k">COPY INTO</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT
+<span class="k">FROM</span> @stg_dc/inbound/policy/
+FILE_FORMAT = (FORMAT_NAME = <span class="k">'ff_dc_csv'</span>)
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+VALIDATION_MODE = <span class="k">'RETURN_ERRORS'</span>;
+
+<span class="c">-- Then for real</span>
+<span class="k">COPY INTO</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT
+<span class="k">FROM</span> @stg_dc/inbound/policy/
+FILE_FORMAT = (FORMAT_NAME = <span class="k">'ff_dc_csv'</span>)
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+INCLUDE_METADATA = (
+    _file_name          = METADATA$FILENAME,
+    _file_row_number    = METADATA$FILE_ROW_NUMBER,
+    _file_last_modified = METADATA$FILE_LAST_MODIFIED,
+    _load_ts            = METADATA$START_SCAN_TIME
+)
+ON_ERROR = ABORT_STATEMENT;</pre></div>
+            <div class="note bad">
+              <span class="label">MATCH_BY_COLUMN_NAME is the most important option on this page</span>
+              <p>Without it, <span class="mono">COPY INTO</span> loads columns <strong>by position</strong>. The day Duck&nbsp;Creek reorders their export &mdash; and eventually they will, without telling anyone &mdash; premiums land in the status column, statuses land in the date column, and <strong>the load reports success</strong>. Every downstream number is wrong and nothing anywhere raises an error. This one option prevents that entire class of failure.</p>
+            </div>
+            <p><strong>Choosing <span class="mono">ON_ERROR</span>:</strong></p>
+            <ul>
+              <li><span class="mono">ABORT_STATEMENT</span> &mdash; fail the whole load on the first bad row. Right for manual loads: loud and obvious.</li>
+              <li><span class="mono">SKIP_FILE</span> &mdash; skip the offending file, continue with others. Right for a pipe, where one bad file must not block the queue.</li>
+              <li><span class="mono">CONTINUE</span> &mdash; load good rows, drop bad ones. <strong>Avoid.</strong> It discards data silently, which is the failure mode this whole design exists to prevent.</li>
+            </ul>
+            <div class="code"><div class="cap">Automate</div><pre><span class="k">CREATE OR REPLACE PIPE</span> GYRUS_DW.RAW_DUCKCREEK.pipe_policy
+  AUTO_INGEST = TRUE
+<span class="k">AS</span>
+<span class="k">COPY INTO</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT
+<span class="k">FROM</span> @stg_dc/inbound/policy/
+FILE_FORMAT = (FORMAT_NAME = <span class="k">'ff_dc_csv'</span>)
+MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE
+INCLUDE_METADATA = (_file_name = METADATA$FILENAME,
+                    _file_row_number = METADATA$FILE_ROW_NUMBER,
+                    _load_ts = METADATA$START_SCAN_TIME)
+ON_ERROR = SKIP_FILE;
+
+<span class="c">-- Take notification_channel (an SQS ARN) from here...</span>
+<span class="k">SHOW PIPES</span> <span class="k">LIKE</span> <span class="k">'pipe_policy'</span>;
+<span class="c">-- ...and set it as the destination of an S3 event notification on the bucket,</span>
+<span class="c">--    filtered to prefix inbound/policy/ and suffix .csv</span>
+
+<span class="k">SELECT</span> SYSTEM$PIPE_STATUS(<span class="k">'GYRUS_DW.RAW_DUCKCREEK.pipe_policy'</span>);
+<span class="c">-- executionState should read RUNNING; pendingFileCount rises then falls on upload</span></pre></div>
+            <p class="why"><strong>Snowpipe is serverless.</strong> It does not use <span class="mono">LOAD_WH</span> &mdash; it is billed per file plus compute-seconds. That means many tiny files cost far more than a few large ones, which is worth raising with Duck&nbsp;Creek if they propose per-transaction exports.</p>
+            <p class="why bad"><strong>Event notifications only fire for new objects.</strong> Files already sitting in the bucket when you create the pipe will never load. Use <span class="mono">ALTER PIPE &hellip; REFRESH</span> to queue the last 7 days, and a one-off <span class="mono">COPY INTO</span> for anything older.</p>
+            <div class="note warn">
+              <span class="label">Idempotency is free &mdash; for 64 days</span>
+              <p>Snowflake records which files it has already loaded into each table and skips them, so re-running a load will not duplicate rows. <strong>That record is kept for 64 days only.</strong> A file re-delivered after that window loads again and duplicates silently. This is exactly why step 8 keeps our own manifest instead of relying on the built-in behaviour.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 8</div>
+          <div class="istep-b">
+            <h4>Build the control plane &mdash; do not treat this as optional</h4>
+            <p>Everything above moves data. This is what tells you whether the data is <em>right</em>. File pipelines fail quietly, and each object here exists because its absence produces confidently wrong numbers rather than an error.</p>
+            <p><strong>8a. A manifest of what we received.</strong> Snowflake&rsquo;s own load record expires after 64 days; ours does not.</p>
+            <div class="code"><div class="cap">Manifest</div><pre><span class="k">CREATE TABLE IF NOT EXISTS</span> GYRUS_DW.ADMIN.LOAD_MANIFEST (
+    report_name VARCHAR, file_name VARCHAR, business_date DATE,
+    export_ts TIMESTAMP_NTZ, rows_loaded NUMBER,
+    control_rows NUMBER, control_sum NUMBER(38,2),
+    reconciled BOOLEAN, loaded_at TIMESTAMP_LTZ, notes VARCHAR
+);
+
+<span class="c">-- Identity parsed straight out of the filename agreed in step 1</span>
+<span class="k">INSERT INTO</span> GYRUS_DW.ADMIN.LOAD_MANIFEST
+    (report_name, file_name, business_date, export_ts, rows_loaded, loaded_at)
+<span class="k">SELECT</span> <span class="k">'policy'</span>, _file_name,
+       <span class="k">TRY_TO_DATE</span>(<span class="k">REGEXP_SUBSTR</span>(_file_name, <span class="k">'(\\d{8})'</span>), <span class="k">'YYYYMMDD'</span>),
+       <span class="k">TRY_TO_TIMESTAMP</span>(<span class="k">REGEXP_SUBSTR</span>(_file_name, <span class="k">'(\\d{8}_\\d{6})'</span>), <span class="k">'YYYYMMDD_HHMISS'</span>),
+       <span class="k">COUNT</span>(*), <span class="k">MIN</span>(_load_ts)
+<span class="k">FROM</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT
+<span class="k">WHERE</span> _file_name <span class="k">NOT IN</span> (<span class="k">SELECT</span> file_name <span class="k">FROM</span> GYRUS_DW.ADMIN.LOAD_MANIFEST)
+<span class="k">GROUP BY</span> 1,2,3,4;</pre></div>
+
+            <p><strong>8b. Detect the file that never came.</strong> To notice something is absent you must know it was expected, which needs a calendar table.</p>
+            <div class="code"><div class="cap">Missing-file alerting</div><pre><span class="k">CREATE TABLE IF NOT EXISTS</span> GYRUS_DW.ADMIN.EXPECTED_FILES (
+    report_name VARCHAR, business_date DATE,
+    expected_by TIMESTAMP_NTZ, is_business_day BOOLEAN
+);
+
+<span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.ADMIN.V_MISSING_FILES <span class="k">AS</span>
+<span class="k">SELECT</span> e.report_name, e.business_date, e.expected_by,
+       <span class="k">DATEDIFF</span>(<span class="k">'hour'</span>, e.expected_by, <span class="k">CURRENT_TIMESTAMP</span>()) <span class="k">AS</span> hours_overdue
+<span class="k">FROM</span> GYRUS_DW.ADMIN.EXPECTED_FILES e
+<span class="k">LEFT JOIN</span> GYRUS_DW.ADMIN.LOAD_MANIFEST m
+       <span class="k">ON</span> m.report_name = e.report_name <span class="k">AND</span> m.business_date = e.business_date
+<span class="k">WHERE</span> e.is_business_day
+  <span class="k">AND</span> e.expected_by &lt; <span class="k">CURRENT_TIMESTAMP</span>()
+  <span class="k">AND</span> m.file_name <span class="k">IS NULL</span>;
+
+<span class="c">-- Fail loudly so existing alerting picks it up</span>
+<span class="k">CREATE OR REPLACE TASK</span> GYRUS_DW.ADMIN.CHECK_MISSING
+  WAREHOUSE = TRANSFORM_WH
+  SCHEDULE  = <span class="k">'USING CRON 0 9 * * MON-FRI Australia/Sydney'</span>  <span class="c">-- 2h after SLA</span>
+<span class="k">AS</span>
+<span class="k">DECLARE</span> missing <span class="k">INTEGER</span>;
+<span class="k">BEGIN</span>
+  <span class="k">SELECT</span> <span class="k">COUNT</span>(*) <span class="k">INTO</span> missing <span class="k">FROM</span> GYRUS_DW.ADMIN.V_MISSING_FILES;
+  <span class="k">IF</span> (missing &gt; 0) <span class="k">THEN</span> <span class="k">RAISE</span> STATEMENT_ERROR; <span class="k">END IF</span>;
+<span class="k">END</span>;
+
+<span class="k">ALTER TASK</span> GYRUS_DW.ADMIN.CHECK_MISSING <span class="k">RESUME</span>;</pre></div>
+            <div class="note bad">
+              <span class="label">Why this is the most important alert in the pipeline</span>
+              <p>Every other check tells you data is bad. This one tells you there is <strong>no</strong> data &mdash; which otherwise presents as dashboards rendering perfectly with yesterday&rsquo;s figures. No error, no failed job, nothing red. People make decisions on stale numbers for days. <strong>Test it by deliberately skipping a delivery</strong> before you call the pipeline done.</p>
+            </div>
+
+            <p><strong>8c. Reconcile against their totals, and surface cast failures.</strong></p>
+            <div class="code"><div class="cap">Reconciliation and data quality</div><pre><span class="c">-- Did we load what they said they sent? (needs control totals from step 1)</span>
+<span class="k">SELECT</span> m.business_date, m.rows_loaded, m.control_rows,
+       m.rows_loaded - m.control_rows                <span class="k">AS</span> row_diff,
+       <span class="k">CASE</span> <span class="k">WHEN</span> m.control_rows <span class="k">IS NULL</span>        <span class="k">THEN</span> <span class="k">'NO_CONTROL_FILE'</span>
+            <span class="k">WHEN</span> m.rows_loaded = m.control_rows <span class="k">THEN</span> <span class="k">'OK'</span>
+            <span class="k">ELSE</span> <span class="k">'MISMATCH'</span> <span class="k">END</span>                 <span class="k">AS</span> recon_status
+<span class="k">FROM</span> GYRUS_DW.ADMIN.LOAD_MANIFEST m
+<span class="k">WHERE</span> m.report_name = <span class="k">'policy'</span>;
+
+<span class="c">-- Which values failed to cast? Present in RAW, NULL after conversion.</span>
+<span class="c">-- This is the payoff for the all-text rule in step 6.</span>
+<span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.STAGING.V_CAST_FAILURES <span class="k">AS</span>
+<span class="k">SELECT</span> _file_name, _file_row_number, policy_id,
+       gross_premium <span class="k">AS</span> raw_value, <span class="k">'gross_premium'</span> <span class="k">AS</span> column_name
+<span class="k">FROM</span> GYRUS_DW.RAW_DUCKCREEK.POLICY_EXTRACT
+<span class="k">WHERE</span> <span class="k">TRIM</span>(<span class="k">COALESCE</span>(gross_premium, <span class="k">''</span>)) &lt;&gt; <span class="k">''</span>
+  <span class="k">AND</span> <span class="k">TRY_TO_NUMBER</span>(<span class="k">REPLACE</span>(<span class="k">TRIM</span>(gross_premium), <span class="k">','</span>, <span class="k">''</span>), 18, 2) <span class="k">IS NULL</span>;
+
+<span class="c">-- No control totals? Compare against the file's own recent history instead.</span>
+<span class="k">SELECT</span> business_date, rows_loaded,
+       <span class="k">AVG</span>(rows_loaded) <span class="k">OVER</span> (<span class="k">ORDER BY</span> business_date
+                            <span class="k">ROWS BETWEEN</span> 7 <span class="k">PRECEDING AND</span> 1 <span class="k">PRECEDING</span>) <span class="k">AS</span> avg_prev_7
+<span class="k">FROM</span> GYRUS_DW.ADMIN.LOAD_MANIFEST <span class="k">WHERE</span> report_name = <span class="k">'policy'</span>;</pre></div>
+            <p class="why good"><strong><span class="mono">V_CAST_FAILURES</span> is what makes the all-text rule pay off.</strong> Instead of a failed load and a missing day, you get an exact list &mdash; file, line number, offending value &mdash; that you can forward to Duck&nbsp;Creek. Meanwhile reporting continues on the rows that are fine.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>6.3 &nbsp;If the extracts arrive as Excel</h3>
+      <div class="prose">
+        <p><strong>Snowflake cannot read <span class="mono">.xlsx</span>.</strong> <span class="mono">COPY INTO</span> supports CSV, JSON, Avro, ORC, Parquet and XML &mdash; that is the whole list. Ask for CSV first; most reporting tools export it just as easily, and it removes an entire class of problems permanently.</p>
+        <p>If the answer is no, parse it inside Snowflake with a Python procedure &mdash; no external infrastructure to run or monitor.</p>
+      </div>
+      <div class="code"><div class="cap">Excel parsing, in Snowflake</div><pre><span class="k">CREATE OR REPLACE PROCEDURE</span> load_xlsx(stage_path <span class="k">STRING</span>, sheet <span class="k">STRING</span>)
+<span class="k">RETURNS</span> <span class="k">STRING</span> <span class="k">LANGUAGE</span> PYTHON RUNTIME_VERSION = <span class="k">'3.11'</span>
+PACKAGES = (<span class="k">'snowflake-snowpark-python'</span>, <span class="k">'openpyxl'</span>, <span class="k">'pandas'</span>) HANDLER = <span class="k">'run'</span>
+<span class="k">AS</span> $$
+<span class="k">import</span> pandas <span class="k">as</span> pd
+<span class="k">def</span> run(session, stage_path, sheet):
+    stream = session.file.get_stream(stage_path, decompress=<span class="k">False</span>)
+    df = pd.read_excel(stream, sheet_name=sheet, engine=<span class="k">'openpyxl'</span>,
+                       dtype=<span class="k">str</span>,      <span class="c"># all text — same rule as step 6</span>
+                       header=0)
+    df = df.dropna(how=<span class="k">'all'</span>)     <span class="c"># trailing phantom rows</span>
+    df.columns = [<span class="k">str</span>(c).strip().lower().replace(<span class="k">' '</span>, <span class="k">'_'</span>) <span class="k">for</span> c <span class="k">in</span> df.columns]
+    df[<span class="k">'_source_file'</span>] = stage_path
+    session.write_pandas(df, <span class="k">'POLICY_EXTRACT_XLSX'</span>, schema=<span class="k">'RAW_DUCKCREEK'</span>,
+                         database=<span class="k">'GYRUS_DW'</span>, auto_create_table=<span class="k">True</span>,
+                         overwrite=<span class="k">False</span>)   <span class="c"># append — RAW is append-only</span>
+    <span class="k">return</span> f<span class="k">'Loaded {len(df)} rows'</span>
+$$;</pre></div>
+      <div class="prose"><p><strong><span class="mono">dtype=str</span> matters</strong> for the same reason step 6 does, plus one more: it stops pandas inferring types differently between files, which would break the table schema on an ordinary Tuesday. It also preserves leading zeros and prevents large reference numbers becoming floats.</p></div>
+      <div class="tw">
+        <table>
+          <caption>Excel hazards to handle explicitly &mdash; each of these has caused a real production defect somewhere</caption>
+          <thead><tr><th style="width:28%">Hazard</th><th>Symptom</th><th style="width:30%">Handling</th></tr></thead>
+          <tbody>
+            <tr><td>Total row at the bottom</td><td>Every aggregate roughly doubles</td><td>Filter it in staging; reconcile against it first, it is free validation</td></tr>
+            <tr><td>Dates as serial numbers</td><td><span class="mono">45870</span> where a date should be</td><td>Convert using the Excel epoch offset</td></tr>
+            <tr><td>Numbers stored as text</td><td><span class="mono">"1,234.56"</span>, <span class="mono">"(500)"</span> for negatives</td><td>Strip separators; handle accounting-style negatives</td></tr>
+            <tr><td>Header not on row 1</td><td>Logo or title rows above the real header</td><td>Detect the header row rather than assuming</td></tr>
+            <tr><td>Merged cells</td><td>A value in one cell, blanks beside it</td><td>Forward-fill, or reject the file to <span class="mono">rejected/</span></td></tr>
+            <tr><td>Multiple sheets</td><td>Wrong sheet parsed silently</td><td>Name the sheet in the data contract and select it explicitly</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="s7">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Route C &mdash; Duck Creek API ingestion</h2></div>
+    <div class="opt-head">
+      <div class="opt-id"><span class="rank">C</span><div>
+        <h3 class="opt-name">Poll the API Gyrus already calls</h3>
+        <p class="opt-sub">Needs nobody&rsquo;s permission. Fast to prove, structurally weak as a foundation.</p>
+      </div></div>
+      <span class="verdict v-part">Supplement, not backbone</span>
+    </div>
+    <div class="scorerow">
+      <div class="score"><div class="score-top"><span class="score-nm">Speed</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Completeness</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Freshness</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Build effort</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Ops burden</span><span class="score-vl">1/5</span></div><div class="meter b"><i class="f"></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Independence</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+    </div>
+
+    <div class="prose">
+      <p>We already hold credentials and know the payloads, so this is the only route we could start this afternoon. That makes it excellent for a proof of concept and poor as a permanent foundation &mdash; and the reasons are structural, not fixable with better engineering.</p>
+    </div>
+
+    <div class="sub">
+      <h3>7.1 &nbsp;How to build it</h3>
+      <div class="steps">
+        <div class="istep">
+          <div class="istep-n">Step 1</div>
+          <div class="istep-b">
+            <h4>Land the whole JSON payload untouched</h4>
+            <p>Snowflake has a native <span class="mono">VARIANT</span> type that stores JSON directly and lets you query into it with SQL. Store the entire response, not the fields you think you need.</p>
+            <div class="code"><div class="cap">Landing table</div><pre><span class="k">CREATE OR REPLACE TABLE</span> GYRUS_DW.RAW_DUCKCREEK.API_POLICY (
+    payload     <span class="k">VARIANT</span>,        <span class="c">-- the entire response object</span>
+    endpoint    <span class="k">VARCHAR</span>,
+    page_no     <span class="k">NUMBER</span>,
+    fetched_at  <span class="k">TIMESTAMP_LTZ</span>,
+    request_id  <span class="k">VARCHAR</span>         <span class="c">-- ties rows to one run, for debugging</span>
+);</pre></div>
+            <p class="why"><strong>Why keep the whole payload.</strong> If your flattening logic turns out to be wrong &mdash; wrong field, wrong nesting, missed an array &mdash; you rewrite a view and rebuild. If you had extracted only five fields at fetch time, you would have to re-call the API for every record, which may not even be possible for historical data.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 2</div>
+          <div class="istep-b">
+            <h4>Flatten into a staging view</h4>
+            <p><span class="mono">LATERAL FLATTEN</span> turns a JSON array into rows. The <span class="mono">:</span> operator navigates into the object and <span class="mono">::</span> casts the result.</p>
+            <div class="code"><div class="cap">Flattening</div><pre><span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.STAGING.STG_API_POLICY <span class="k">AS</span>
+<span class="k">SELECT</span>
+    f.value:policyId::<span class="k">VARCHAR</span>                  <span class="k">AS</span> policy_id,
+    f.value:brokerRef::<span class="k">VARCHAR</span>                 <span class="k">AS</span> broker_ref,
+    <span class="k">UPPER</span>(<span class="k">TRIM</span>(f.value:status::<span class="k">VARCHAR</span>))      <span class="k">AS</span> policy_status,
+    <span class="k">TRY_TO_NUMBER</span>(f.value:grossPremium::<span class="k">VARCHAR</span>, 18, 2) <span class="k">AS</span> gross_premium,
+    <span class="k">TRY_TO_DATE</span>(f.value:effectiveDate::<span class="k">VARCHAR</span>)  <span class="k">AS</span> effective_date,
+    a.fetched_at
+<span class="k">FROM</span> GYRUS_DW.RAW_DUCKCREEK.API_POLICY a,
+     <span class="k">LATERAL FLATTEN</span>(<span class="k">input</span> =&gt; a.payload:items) f
+<span class="k">QUALIFY</span> <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (
+    <span class="k">PARTITION BY</span> f.value:policyId::<span class="k">VARCHAR</span>
+    <span class="k">ORDER BY</span> a.fetched_at <span class="k">DESC</span>) = 1;</pre></div>
+            <p class="why"><strong>The <span class="mono">QUALIFY</span> clause is doing heavy lifting here.</strong> API polling produces duplicates constantly &mdash; a retry after a timeout, overlapping pages, a re-run after a partial failure. Keeping only the newest row per policy makes all of that harmless.</p>
+          </div>
+        </div>
+
+        <div class="istep">
+          <div class="istep-n">Step 3</div>
+          <div class="istep-b">
+            <h4>Track where you got to</h4>
+            <p>An API poller must be resumable. Without a watermark, a failure halfway through means either re-fetching everything or silently missing a window.</p>
+            <div class="code"><div class="cap">Watermark</div><pre><span class="k">CREATE TABLE IF NOT EXISTS</span> GYRUS_DW.ADMIN.API_WATERMARK (
+    endpoint          <span class="k">VARCHAR</span>,
+    last_success_ts   <span class="k">TIMESTAMP_LTZ</span>,  <span class="c">-- resume point</span>
+    last_cursor       <span class="k">VARCHAR</span>,        <span class="c">-- provider pagination token</span>
+    consecutive_fails <span class="k">NUMBER DEFAULT</span> 0,
+    updated_at        <span class="k">TIMESTAMP_LTZ</span>
+);</pre></div>
+            <p class="why"><strong>Alert on <span class="mono">consecutive_fails</span>.</strong> A poller that has been failing quietly for three days looks identical to one that is working, because the warehouse still has data in it &mdash; just increasingly stale data.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>7.2 &nbsp;The limits you cannot engineer away</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:26%">Limit</th><th>Why it exists</th><th style="width:28%">Consequence for us</th></tr></thead>
+          <tbody>
+            <tr><td><strong>No deletes</strong></td><td>An API answers &ldquo;what exists?&rdquo;. There is no endpoint for &ldquo;what did you remove?&rdquo;.</td><td>Cancelled policies persist indefinitely. In-force counts and GWP overstate, permanently, until someone notices.</td></tr>
+            <tr><td><strong>Bulk history is slow</strong></td><td>Transactional APIs are built for single-record reads, paginated in small pages.</td><td>Backfilling years of policy data may take days, or breach rate limits and be refused entirely.</td></tr>
+            <tr><td><strong>Every operational concern is ours</strong></td><td>Pagination, throttling, backoff, checkpointing, partial-failure recovery, schema versioning &mdash; all bespoke code.</td><td>Permanent ownership. This code never stops needing someone who understands it.</td></tr>
+            <tr><td><strong>Load falls on production</strong></td><td>The same API serves the live broker site.</td><td>A backfill competing with customer traffic is a real availability risk. Hence Q11 asking for a non-production environment.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note warn">
+        <span class="label">Where this route genuinely earns its place</span>
+        <p>Two good uses. As a <strong>two-week proof of concept</strong> that de-risks the modelling work while the vendor conversation runs. And later, as a <strong>near-real-time delta layer</strong> over a batch baseline, for the handful of entities where minutes actually matter. Neither of those is a backbone, and the difference is worth being explicit about with stakeholders.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s8">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Route D &mdash; managed connector platform</h2></div>
+    <div class="opt-head">
+      <div class="opt-id"><span class="rank">D</span><div>
+        <h3 class="opt-name">Fivetran, Airbyte or equivalent in the middle</h3>
+        <p class="opt-sub">Buys scheduling, retries and monitoring. Still needs a source that exists.</p>
+      </div></div>
+      <span class="verdict v-part">Only if already licensed</span>
+    </div>
+    <div class="scorerow">
+      <div class="score"><div class="score-top"><span class="score-nm">Speed</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Completeness</span><span class="score-vl">3/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Freshness</span><span class="score-vl">3/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Build effort</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Ops burden</span><span class="score-vl">4/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Independence</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+    </div>
+    <div class="prose">
+      <p>The key thing to understand: <strong>a connector does not create access that does not exist.</strong> It would sit on top of Route B or Route C rather than replacing them. What you are buying is the operational layer &mdash; scheduling, retry logic, schema-drift handling, a monitoring UI &mdash; not a new way into Duck&nbsp;Creek.</p>
+      <p>That makes this an almost entirely commercial decision, and it resolves with one internal email.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:50%">Rule it in if</th><th>Rule it out if</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>The organisation <strong>already licenses one</strong>. Marginal cost is near zero and it saves weeks &mdash; check this before building anything.</td>
+            <td>We would be buying it solely for this. Consumption pricing scales with rows changed and grows unpredictably on high-volume policy data.</td>
+          </tr>
+          <tr>
+            <td>Several more sources are coming, so the platform amortises across them.</td>
+            <td>It adds a third vendor to the critical path of a pipeline that otherwise has two.</td>
+          </tr>
+          <tr>
+            <td>We would rather buy operational maturity than build and own it.</td>
+            <td>A custom-built source connector would be needed &mdash; that removes most of the &ldquo;managed&rdquo; benefit while keeping the bill.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="s9">
+    <div class="sec-head"><span class="sec-num">09</span><h2>Route E &mdash; direct database access with CDC</h2></div>
+    <div class="opt-head">
+      <div class="opt-id"><span class="rank">E</span><div>
+        <h3 class="opt-name">Replicate the operational database</h3>
+        <p class="opt-sub">Technically the richest option. Almost certainly unavailable from vendor-hosted SaaS.</p>
+      </div></div>
+      <span class="verdict v-no">Ask, but do not plan on it</span>
+    </div>
+    <div class="scorerow">
+      <div class="score"><div class="score-top"><span class="score-nm">Speed</span><span class="score-vl">1/5</span></div><div class="meter b"><i class="f"></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Completeness</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Freshness</span><span class="score-vl">5/5</span></div><div class="meter g"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Build effort</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Ops burden</span><span class="score-vl">2/5</span></div><div class="meter w"><i class="f"></i><i class="f"></i><i></i><i></i><i></i></div></div>
+      <div class="score"><div class="score-top"><span class="score-nm">Independence</span><span class="score-vl">3/5</span></div><div class="meter"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i></i></div></div>
+    </div>
+
+    <div class="prose">
+      <p>Complete data, true change capture including deletes, near-real-time latency. It is listed last only because vendor-hosted core systems do not expose their operational database &mdash; multi-tenancy, schema stability, upgrade cycles and the load an external reader places on a transactional system all argue against it.</p>
+      <p><strong>Read this section anyway.</strong> It is the pattern we will use immediately for the <em>Gyrus application database</em>, which we control outright and which &sect;15 puts on the critical path from week two.</p>
+    </div>
+
+    <div class="sub">
+      <h3>9.1 &nbsp;What CDC is, and why it beats re-reading tables</h3>
+      <div class="prose">
+        <p>Two ways to keep a warehouse in sync with a database. <strong>Full refresh</strong> re-reads every table on every run: simple, but slow, expensive, and it hammers the source. <strong>Change data capture</strong> reads the log the database already writes for its own replication and recovery, and replays those changes into the warehouse.</p>
+        <p>CDC wins on three counts: it is near-real-time, it puts almost no load on the source (it is reading a log file, not scanning tables), and &mdash; uniquely among all five routes &mdash; <strong>it captures deletes</strong>.</p>
+        <p>The two engines expose this differently, which changes what you have to configure.</p>
+      </div>
+      <div class="code"><div class="cap">SQL Server &mdash; Change Tracking</div><pre><span class="c">-- Database level. No restart required.</span>
+<span class="k">ALTER DATABASE</span> gyrus <span class="k">SET</span> CHANGE_TRACKING = <span class="k">ON</span>
+    (CHANGE_RETENTION = 7 DAYS, AUTO_CLEANUP = <span class="k">ON</span>);
+
+<span class="c">-- Per table — and tables WITHOUT a primary key are silently skipped.</span>
+<span class="c">-- Find them BEFORE you plan the load:</span>
+<span class="k">SELECT</span> s.name, t.name <span class="k">FROM</span> sys.tables t
+<span class="k">JOIN</span> sys.schemas s <span class="k">ON</span> t.schema_id = s.schema_id
+<span class="k">WHERE NOT EXISTS</span> (<span class="k">SELECT</span> 1 <span class="k">FROM</span> sys.indexes i
+                  <span class="k">WHERE</span> i.object_id = t.object_id <span class="k">AND</span> i.is_primary_key = 1);
+
+<span class="k">ALTER TABLE</span> dbo.quote <span class="k">ENABLE</span> CHANGE_TRACKING <span class="k">WITH</span> (TRACK_COLUMNS_UPDATED = <span class="k">OFF</span>);
+
+<span class="c">-- Read-only replication login</span>
+<span class="k">CREATE LOGIN</span> snowflake_cdc <span class="k">WITH PASSWORD</span> = <span class="k">'&lt;strong&gt;'</span>;
+<span class="k">CREATE USER</span>  snowflake_cdc <span class="k">FOR LOGIN</span> snowflake_cdc;
+<span class="k">GRANT SELECT</span>               <span class="k">ON SCHEMA</span>::dbo <span class="k">TO</span> snowflake_cdc;
+<span class="k">GRANT VIEW CHANGE TRACKING</span> <span class="k">ON SCHEMA</span>::dbo <span class="k">TO</span> snowflake_cdc;  <span class="c">-- the forgotten one</span></pre></div>
+      <div class="code"><div class="cap">MySQL &mdash; binary log</div><pre><span class="c">-- Must be ROW format. STATEMENT records the SQL text, which cannot be</span>
+<span class="c">-- reliably replayed into a different system.</span>
+<span class="k">SHOW VARIABLES LIKE</span> <span class="k">'binlog_format'</span>;      <span class="c">-- want ROW</span>
+<span class="k">SHOW VARIABLES LIKE</span> <span class="k">'binlog_row_image'</span>;   <span class="c">-- want FULL</span>
+
+<span class="c">-- On RDS these live in a parameter group and REQUIRE A REBOOT to take effect.</span>
+<span class="c">-- Schedule that. Multi-AZ failover is typically 60–120 seconds.</span>
+<span class="k">CALL</span> mysql.rds_set_configuration(<span class="k">'binlog retention hours'</span>, 168);
+
+<span class="k">CREATE USER</span> <span class="k">'snowflake_cdc'</span>@<span class="k">'10.0.1.%'</span> <span class="k">IDENTIFIED BY</span> <span class="k">'&lt;strong&gt;'</span>;
+<span class="k">GRANT SELECT</span> <span class="k">ON</span> gyrus.* <span class="k">TO</span> <span class="k">'snowflake_cdc'</span>@<span class="k">'10.0.1.%'</span>;
+<span class="k">GRANT REPLICATION SLAVE, REPLICATION CLIENT</span> <span class="k">ON</span> *.* <span class="k">TO</span> <span class="k">'snowflake_cdc'</span>@<span class="k">'10.0.1.%'</span>;</pre></div>
+      <div class="prose">
+        <p>Note what those grants do <em>not</em> include: no <span class="mono">INSERT</span>, <span class="mono">UPDATE</span> or <span class="mono">DELETE</span>. The replication account is strictly read-only against the data. Verify that before handing credentials to anyone.</p>
+      </div>
+      <div class="tw">
+        <table>
+          <caption>Differences that affect planning, not just syntax</caption>
+          <thead><tr><th style="width:26%">Concern</th><th style="width:37%">SQL Server</th><th>MySQL</th></tr></thead>
+          <tbody>
+            <tr><td>What is recorded</td><td>Net state since last sync &mdash; three updates between syncs give you the final value only</td><td>Every individual change, in order</td></tr>
+            <tr><td>Restart needed to enable</td><td><span class="pill p-g">No</span></td><td><span class="pill p-b">Yes &mdash; parameter group + reboot</span></td></tr>
+            <tr><td>Per-table opt-in</td><td>Required, per table</td><td>Not required &mdash; the log is instance-wide</td></tr>
+            <tr><td>Primary key required</td><td>Yes &mdash; no PK means silently skipped</td><td>Yes</td></tr>
+            <tr><td>Retention setting</td><td><span class="mono">CHANGE_RETENTION</span></td><td><span class="mono">binlog retention hours</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note bad">
+        <span class="label">Two silent failures to guard against</span>
+        <p><strong>Tables without a primary key never appear.</strong> No error, no warning &mdash; they are simply absent from the warehouse. Run the audit query above before planning, not after someone asks where a table went.</p>
+        <p><strong>The retention window is a hard deadline.</strong> If the connector is offline longer than it, its position expires and affected tables need a full re-snapshot. Set retention generously &mdash; 7 days, not the documented minimum &mdash; and alert when replication lag approaches it. By the time a human notices manually, it is already too late.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s10">
+    <div class="sec-head"><span class="sec-num">10</span><h2>Deletes &mdash; the hazard every route shares</h2></div>
+    <div class="prose">
+      <p class="lede">Deleted records are the commonest cause of a warehouse that is confidently wrong. Three of the five routes lose them unless we build for it.</p>
+      <p>For a broker this is not academic. A cancelled policy that lingers inflates in-force counts, gross written premium and commission. Nothing errors. The dashboard renders, the query succeeds, the number is wrong, and it stays wrong until someone reconciles against the source by hand.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:20%">Route</th><th style="width:24%">What happens to a deleted row</th><th>What we must build</th></tr></thead>
+        <tbody>
+          <tr><td><strong>A &middot; Data share</strong></td><td><span class="pill p-g">Gone upstream</span></td><td>Nothing &mdash; we read their current state. Still confirm Clarity removes rather than flags.</td></tr>
+          <tr><td><strong>B &middot; Extracts</strong></td><td><span class="pill p-w">Absent from next file</span></td><td>The latest-snapshot-wins <span class="mono">QUALIFY</span> in &sect;4.6 handles it. Snapshot diffing only if we need to <em>know</em> what was deleted.</td></tr>
+          <tr><td><strong>C &middot; API</strong></td><td><span class="pill p-b">Invisible forever</span></td><td>A periodic full reconciliation sweep &mdash; expensive, and the main reason this is not a backbone.</td></tr>
+          <tr><td><strong>E &middot; CDC</strong></td><td><span class="pill p-w">Usually flagged, not removed</span></td><td>A filter on the connector&rsquo;s delete flag in <em>every</em> staging view.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sub">
+      <h3>10.1 &nbsp;Determine the behaviour empirically, before modelling</h3>
+      <div class="prose"><p>Do not assume. Three minutes of testing settles it, and everything downstream depends on the answer.</p></div>
+      <div class="code"><div class="cap">The test</div><pre><span class="c">-- 1. Delete a safe test row at the source. Wait one sync cycle. Then:</span>
+<span class="k">SELECT</span> * <span class="k">FROM</span> GYRUS_DW.RAW_DUCKCREEK.POLICY <span class="k">WHERE</span> policy_id = <span class="k">'&lt;test&gt;'</span>;
+
+<span class="c">--   Row absent  → HARD delete. No filter needed.</span>
+<span class="c">--   Row present → SOFT delete. Note the flag column. It MUST be filtered.</span>
+
+<span class="c">-- 2. Find the metadata columns the mechanism added</span>
+<span class="k">SELECT</span> column_name, data_type
+<span class="k">FROM</span> GYRUS_DW.INFORMATION_SCHEMA.COLUMNS
+<span class="k">WHERE</span> table_schema = <span class="k">'RAW_DUCKCREEK'</span> <span class="k">AND</span> table_name = <span class="k">'POLICY'</span>
+  <span class="k">AND</span> column_name <span class="k">LIKE</span> <span class="k">'\\_%'</span> <span class="k">ESCAPE</span> <span class="k">'\\'</span>;
+
+<span class="c">-- 3. If soft-deleted, add this to EVERY staging view (the line left out of §4.6)</span>
+<span class="k">WHERE</span> <span class="k">NOT</span> <span class="k">COALESCE</span>(_deleted_flag, <span class="k">FALSE</span>)</pre></div>
+      <p class="why bad"><strong>Soft deletes are the default behaviour of most CDC connectors</strong>, because preserving history is usually desirable. It only becomes a defect when nobody filters the flag &mdash; and because the rows look completely normal, code review rarely catches it. Record the answer in the runbook.</p>
+    </div>
+
+    <div class="sub">
+      <h3>10.2 &nbsp;Deriving deletions from consecutive snapshots</h3>
+      <div class="prose"><p>If we take Route B and need to know <em>when</em> something was cancelled rather than just excluding it, compare each snapshot with the one before.</p></div>
+      <div class="code"><div class="cap">Snapshot diff</div><pre><span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.MARTS.V_POLICY_DISAPPEARANCES <span class="k">AS</span>
+<span class="k">WITH</span> dates <span class="k">AS</span> (
+  <span class="k">SELECT DISTINCT</span> snapshot_date,
+         <span class="k">LAG</span>(snapshot_date) <span class="k">OVER</span> (<span class="k">ORDER BY</span> snapshot_date) <span class="k">AS</span> prev_date
+  <span class="k">FROM</span> GYRUS_DW.STAGING.STG_POLICY_SNAPSHOTS
+)
+<span class="k">SELECT</span> d.snapshot_date <span class="k">AS</span> disappeared_on, p.policy_id
+<span class="k">FROM</span> dates d
+<span class="k">JOIN</span>      GYRUS_DW.STAGING.STG_POLICY_SNAPSHOTS p <span class="k">ON</span> p.snapshot_date = d.prev_date
+<span class="k">LEFT JOIN</span> GYRUS_DW.STAGING.STG_POLICY_SNAPSHOTS c
+       <span class="k">ON</span> c.snapshot_date = d.snapshot_date <span class="k">AND</span> c.policy_id = p.policy_id
+<span class="k">WHERE</span> d.prev_date <span class="k">IS NOT NULL</span>
+  <span class="k">AND</span> c.policy_id <span class="k">IS NULL</span>;   <span class="c">-- present yesterday, absent today</span></pre></div>
+      <div class="note bad">
+        <span class="label">Never act on this view alone</span>
+        <p>A row disappearing might mean deleted &mdash; or the export filter changed, or the report ran for a narrower date range, or <strong>the file was truncated</strong>. A truncated extract is indistinguishable from a mass cancellation event. <strong>Always confirm the file reconciled (&sect;06 step 8c) before treating disappearances as deletions.</strong> Getting this backwards turns a reporting glitch into a business incident.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s11">
+    <div class="sec-head"><span class="sec-num">11</span><h2>The Gyrus dimensional model</h2></div>
+    <div class="prose">
+      <p>Whatever route wins, this is what MARTS should look like. <strong>Facts</strong> record events &mdash; a policy version, a payment, a claim. <strong>Dimensions</strong> describe the things you filter and group by &mdash; broker, product, date. This star-shaped arrangement is what BI tools expect and what non-engineers can reason about.</p>
+      <p>The grain decisions below matter more than the SQL. Grain means &ldquo;what does one row represent?&rdquo;, and getting it wrong is expensive to unwind once reports depend on it.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <caption>Proposed marts &mdash; the grain is the contract with your analysts</caption>
+        <thead><tr><th style="width:23%">Object</th><th style="width:28%">One row per&hellip;</th><th>Why this grain and not a simpler one</th></tr></thead>
+        <tbody>
+          <tr><td><span class="mono">FCT_POLICY_VERSION</span></td><td>Policy <strong>version</strong>, not policy</td><td>Endorsements, mid-term adjustments and renewals each create a version. One-row-per-policy throws away premium movement, which is most of what underwriting wants to see.</td></tr>
+          <tr><td><span class="mono">FCT_PREMIUM_TXN</span></td><td>Financial transaction</td><td>Written vs earned premium, instalments, refunds and cancellations are events, not attributes of a policy. Finance needs them separable.</td></tr>
+          <tr><td><span class="mono">FCT_CLAIM</span></td><td>Claim, per snapshot date</td><td>Reserves move over time. Claim development analysis needs the snapshot date on the fact itself.</td></tr>
+          <tr><td><span class="mono">FCT_QUOTE</span></td><td>Quote request</td><td><strong>Built from Gyrus data, not Duck Creek.</strong> Powers quote-to-bind conversion and is available in week four regardless of the vendor answer.</td></tr>
+          <tr><td><span class="mono">DIM_BROKER</span></td><td>Broker, per version</td><td>Type&nbsp;2 &mdash; commission terms and hierarchy change. Historical reporting must use the terms in force at the time, not today&rsquo;s.</td></tr>
+          <tr><td><span class="mono">DIM_PRODUCT</span></td><td>Product, per version</td><td>Type&nbsp;2 &mdash; wordings and cover levels are versioned.</td></tr>
+          <tr><td><span class="mono">DIM_POLICYHOLDER</span></td><td>Insured party</td><td>PII concentrates here deliberately, so masking is applied once rather than across every fact table (&sect;13).</td></tr>
+          <tr><td><span class="mono">DIM_DATE</span></td><td>Calendar day</td><td>With financial year and business-day flags. Every date-based report depends on it and it costs nothing to build.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="code"><div class="cap">The version-grain fact</div><pre><span class="k">CREATE OR REPLACE DYNAMIC TABLE</span> GYRUS_DW.MARTS.FCT_POLICY_VERSION
+  TARGET_LAG = <span class="k">'1 hour'</span> WAREHOUSE = TRANSFORM_WH
+<span class="k">AS</span>
+<span class="k">SELECT</span>
+    p.policy_id, p.policy_version,
+    p.broker_ref, p.product_code, p.policyholder_id,
+    p.policy_status,
+    p.gross_premium, p.commission_amount,
+    p.gross_premium - p.commission_amount    <span class="k">AS</span> net_premium,
+    p.effective_date, p.expiry_date,
+    <span class="k">DATE_TRUNC</span>(<span class="k">'month'</span>, p.effective_date)   <span class="k">AS</span> effective_month,
+    b.broker_name, b.channel,                <span class="c">-- denormalised deliberately</span>
+    <span class="k">ROW_NUMBER</span>() <span class="k">OVER</span> (<span class="k">PARTITION BY</span> p.policy_id
+                       <span class="k">ORDER BY</span> p.policy_version <span class="k">DESC</span>) = 1 <span class="k">AS</span> is_current_version
+<span class="k">FROM</span> GYRUS_DW.STAGING.STG_POLICY  p
+<span class="k">LEFT JOIN</span> GYRUS_DW.STAGING.STG_BROKER b <span class="k">ON</span> p.broker_ref = b.broker_ref;</pre></div>
+    <div class="prose">
+      <p>Three choices in that statement are worth explaining, because each runs against normal OLTP instincts:</p>
+    </div>
+    <ul class="tight">
+      <li><strong>Denormalising <span class="mono">broker_name</span> onto the fact.</strong> In a columnar store, wide tables are cheap &mdash; a query that does not reference a column does not read it &mdash; while runtime joins are the expensive part. The opposite of what you would do in Postgres, and correct here.</li>
+      <li><strong><span class="mono">LEFT JOIN</span>, never <span class="mono">INNER JOIN</span>.</strong> The two sides come from independently extracted sources. A policy written after the broker extract ran would silently vanish from an inner join. A left join keeps it visible with a null broker, and the orphan test below makes the gap countable.</li>
+      <li><strong><span class="mono">is_current_version</span> as a flag.</strong> Analysts asking &ldquo;how many policies are in force?&rdquo; should not have to write a window function. Give them a boolean.</li>
+    </ul>
+
+    <div class="code"><div class="cap">Quality tests &mdash; schedule these, do not run them once</div><pre><span class="c">-- Grain integrity. If this returns rows, every SUM in every report is wrong.</span>
+<span class="k">SELECT</span> policy_id, policy_version, <span class="k">COUNT</span>(*)
+<span class="k">FROM</span> GYRUS_DW.MARTS.FCT_POLICY_VERSION <span class="k">GROUP BY</span> 1,2 <span class="k">HAVING</span> <span class="k">COUNT</span>(*) &gt; 1;
+
+<span class="c">-- Orphans: the cost of LEFT JOIN discipline, made visible</span>
+<span class="k">SELECT</span> <span class="k">COUNT</span>(*) <span class="k">AS</span> orphan_policies
+<span class="k">FROM</span> GYRUS_DW.MARTS.FCT_POLICY_VERSION f
+<span class="k">LEFT JOIN</span> GYRUS_DW.MARTS.DIM_BROKER d <span class="k">USING</span> (broker_ref)
+<span class="k">WHERE</span> d.broker_ref <span class="k">IS NULL</span>;
+
+<span class="c">-- Business rule: premium should not be negative outside cancellations</span>
+<span class="k">SELECT</span> <span class="k">COUNT</span>(*) <span class="k">FROM</span> GYRUS_DW.MARTS.FCT_POLICY_VERSION
+<span class="k">WHERE</span> gross_premium &lt; 0 <span class="k">AND</span> policy_status &lt;&gt; <span class="k">'CANCELLED'</span>;
+
+<span class="c">-- Freshness. Publish this on every dashboard so staleness is visible.</span>
+<span class="k">CREATE OR REPLACE VIEW</span> GYRUS_DW.MARTS.V_DATA_FRESHNESS <span class="k">AS</span>
+<span class="k">SELECT</span> <span class="k">MAX</span>(_load_ts) <span class="k">AS</span> last_load,
+       <span class="k">DATEDIFF</span>(<span class="k">'hour'</span>, <span class="k">MAX</span>(_load_ts), <span class="k">CURRENT_TIMESTAMP</span>()) <span class="k">AS</span> hours_stale
+<span class="k">FROM</span> GYRUS_DW.STAGING.STG_POLICY;</pre></div>
+    <div class="note">
+      <span class="label">Publish freshness where users will see it</span>
+      <p>Users of a batch-fed warehouse will assume it is live unless told otherwise. Putting <span class="mono">V_DATA_FRESHNESS</span> on every dashboard is the cheapest way to stop someone acting on yesterday&rsquo;s numbers believing they are this morning&rsquo;s.</p>
+    </div>
+  </section>
+
+  <section id="s12">
+    <div class="sec-head"><span class="sec-num">12</span><h2>What each route costs to run</h2></div>
+    <div class="prose">
+      <p>Snowflake bills storage and compute separately. Storage is a minor line item; compute is where the money goes, billed per second a warehouse runs. Figures below are order-of-magnitude planning estimates &mdash; substitute your contracted credit rate before quoting them to anyone.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:24%">Component</th><th>What drives it</th><th style="width:28%">How you control it</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Storage</strong></td><td>Roughly $23&ndash;40 per compressed TB per month. Policy data compresses well.</td><td>Short Time Travel on RAW; the S3 archive is the real long-term history.</td></tr>
+          <tr><td><strong>Route A ingestion</strong></td><td><strong>Zero.</strong> No storage, no load compute. You pay only when you query.</td><td>Nothing to control &mdash; this is the route&rsquo;s biggest hidden advantage.</td></tr>
+          <tr><td><strong>Route B ingestion</strong></td><td>Snowpipe is serverless: charged per file plus compute-seconds. Does not touch your warehouses.</td><td><strong>Batch the files.</strong> A thousand small files cost far more than one large one.</td></tr>
+          <tr><td><strong>Route C ingestion</strong></td><td>Whatever runs the poller, plus warehouse time to flatten.</td><td>Poll frequency. Most of the cost here is engineering time, not compute.</td></tr>
+          <tr><td><strong>Route E ingestion</strong></td><td>Connector runtime plus merge compute.</td><td>Realistic merge schedule; let the warehouse suspend between batches.</td></tr>
+          <tr><td><strong>Transformation</strong></td><td>Warehouse seconds &times; refresh frequency.</td><td><strong>Match <span class="mono">TARGET_LAG</span> to the source cadence.</strong> Refreshing hourly over a daily file wakes the warehouse 23 times a day for nothing.</td></tr>
+          <tr><td><strong>BI queries</strong></td><td>Analyst and dashboard activity on <span class="mono">BI_WH</span>.</td><td><span class="mono">AUTO_SUSPEND</span>; result caching makes an identical repeat query free within 24 hours.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="code"><div class="cap">Guardrails &mdash; set these on day one, not after the first invoice</div><pre><span class="k">USE ROLE</span> ACCOUNTADMIN;
+
+<span class="k">CREATE RESOURCE MONITOR</span> GYRUS_MONTHLY
+  <span class="k">WITH</span> CREDIT_QUOTA = 50 FREQUENCY = MONTHLY START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS <span class="k">ON</span> 75  PERCENT <span class="k">DO</span> NOTIFY
+           <span class="k">ON</span> 90  PERCENT <span class="k">DO</span> NOTIFY
+           <span class="k">ON</span> 100 PERCENT <span class="k">DO</span> SUSPEND;
+
+<span class="k">ALTER WAREHOUSE</span> BI_WH <span class="k">SET</span> RESOURCE_MONITOR = GYRUS_MONTHLY;
+<span class="k">ALTER WAREHOUSE</span> BI_WH <span class="k">SET</span> STATEMENT_TIMEOUT_IN_SECONDS = 1800;  <span class="c">-- cap runaways</span>
+
+<span class="c">-- Where did the credits actually go?</span>
+<span class="k">SELECT</span> warehouse_name, <span class="k">ROUND</span>(<span class="k">SUM</span>(credits_used), 2) <span class="k">AS</span> credits
+<span class="k">FROM</span> SNOWFLAKE.ACCOUNT_USAGE.WAREHOUSE_METERING_HISTORY
+<span class="k">WHERE</span> start_time &gt;= <span class="k">DATEADD</span>(<span class="k">'day'</span>, -30, <span class="k">CURRENT_TIMESTAMP</span>())
+<span class="k">GROUP BY</span> 1 <span class="k">ORDER BY</span> 2 <span class="k">DESC</span>;</pre></div>
+    <div class="note">
+      <span class="label">The comparison that decides the commercial question</span>
+      <p>If Clarity carries a licence fee, do not weigh it against zero. Weigh it against what Route B actually costs: three to five weeks of build, <em>plus permanent operational load</em> &mdash; monitoring, missing-file alerting, schema-drift handling, reconciliation, and someone on call who understands all of it. Route A has almost none of that. Counted over two years, the licence may well be the cheaper option.</p>
+    </div>
+  </section>
+
+  <section id="s13">
+    <div class="sec-head"><span class="sec-num">13</span><h2>Security and PII</h2></div>
+    <div class="prose">
+      <p>Policyholder data is personal data and often special-category. Several of these controls are far cheaper to apply before the first row moves than to retrofit afterwards.</p>
+    </div>
+    <ul class="tight">
+      <li><strong>Exclude at source before masking downstream.</strong> A column never extracted cannot leak. Ask Duck&nbsp;Creek to omit fields we do not need &mdash; that beats any policy we could write.</li>
+      <li><strong>Route A has the strongest posture by default</strong> &mdash; no copy of policyholder data in transit or at rest in a second system. Worth weighing alongside the engineering argument, not just after it.</li>
+      <li><strong>Key-pair or managed identity for service accounts</strong>, never passwords. Snowflake supports two registered public keys simultaneously so you can rotate with no downtime.</li>
+      <li><strong>Producer credentials write-only</strong> on Route B &mdash; one prefix, no read, no delete.</li>
+      <li><strong>Network policy</strong> restricting service accounts to known IP ranges; MFA or SSO for every human user.</li>
+    </ul>
+    <div class="code"><div class="cap">Masking and row-level access</div><pre><span class="c">-- PII concentrated in DIM_POLICYHOLDER, so mask once rather than per fact</span>
+<span class="k">CREATE MASKING POLICY</span> mask_pii <span class="k">AS</span> (val <span class="k">STRING</span>) <span class="k">RETURNS</span> <span class="k">STRING</span> -&gt;
+  <span class="k">CASE WHEN</span> <span class="k">CURRENT_ROLE</span>() <span class="k">IN</span> (<span class="k">'PII_READER'</span>, <span class="k">'COMPLIANCE'</span>) <span class="k">THEN</span> val
+       <span class="k">ELSE</span> <span class="k">'***MASKED***'</span> <span class="k">END</span>;
+
+<span class="k">ALTER TABLE</span> GYRUS_DW.MARTS.DIM_POLICYHOLDER
+  <span class="k">MODIFY COLUMN</span> email <span class="k">SET MASKING POLICY</span> mask_pii;
+<span class="k">ALTER TABLE</span> GYRUS_DW.MARTS.DIM_POLICYHOLDER
+  <span class="k">MODIFY COLUMN</span> date_of_birth <span class="k">SET MASKING POLICY</span> mask_pii;
+
+<span class="c">-- Brokers see only their own book</span>
+<span class="k">CREATE ROW ACCESS POLICY</span> broker_own_book <span class="k">AS</span> (broker_ref <span class="k">VARCHAR</span>)
+<span class="k">RETURNS BOOLEAN</span> -&gt;
+  <span class="k">CURRENT_ROLE</span>() = <span class="k">'INTERNAL_ANALYST'</span>
+  <span class="k">OR</span> broker_ref <span class="k">IN</span> (<span class="k">SELECT</span> broker_ref <span class="k">FROM</span> GYRUS_DW.ADMIN.USER_BROKER_MAP
+                     <span class="k">WHERE</span> snowflake_user = <span class="k">CURRENT_USER</span>());
+
+<span class="k">ALTER TABLE</span> GYRUS_DW.MARTS.FCT_POLICY_VERSION
+  <span class="k">ADD ROW ACCESS POLICY</span> broker_own_book <span class="k">ON</span> (broker_ref);</pre></div>
+    <div class="prose">
+      <p>A masking policy is evaluated at query time based on the active role, so the same view returns different values to different people &mdash; no duplicate tables, no separate reporting layer. A row access policy does the same for whole rows, which is how you let brokers self-serve without exposing each other&rsquo;s books.</p>
+    </div>
+    <div class="note warn">
+      <span class="label">Ask Q12 before the first row moves</span>
+      <p>Data residency, retention and masking obligations. Discovering a residency constraint after replicating a year of policyholder data is expensive to unwind &mdash; and on Route A it may also determine which region our Snowflake account has to live in, which is a decision made in week one.</p>
+    </div>
+  </section>
+
+  <section id="s14">
+    <div class="sec-head"><span class="sec-num">14</span><h2>How to select &mdash; the framework</h2></div>
+    <div class="prose">
+      <p class="lede">Two separate questions get confused in conversations like this one: which route is <em>best</em>, and which routes are <em>available</em>. Answer them in that order.</p>
+      <p>Scoring tells you what to want. Availability tells you what you can have. That is why the outcome below is a gated ladder rather than a ranking &mdash; we pursue the highest-scoring route that survives the availability test, and we find out which those are by asking &sect;16.</p>
+    </div>
+
+    <div class="sub">
+      <h3>14.1 &nbsp;The six dimensions, and what they mean</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:20%">Dimension</th><th>The question it answers</th><th style="width:14%">Weight</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Ongoing ops burden</strong></td><td>Once built, how much attention does it need forever? Monitoring, alerting, on-call knowledge, breakage when the source changes.</td><td class="num">25%</td></tr>
+            <tr><td><strong>Completeness</strong></td><td>Do we get all the data, including history and deletes? A route that loses deletes produces wrong numbers by design.</td><td class="num">20%</td></tr>
+            <tr><td><strong>Build effort</strong></td><td>How long until the first trustworthy report? Weeks of engineering before any value appears.</td><td class="num">20%</td></tr>
+            <tr><td><strong>Independence</strong></td><td>How exposed are we if the vendor relationship changes? Can we keep operating?</td><td class="num">15%</td></tr>
+            <tr><td><strong>Freshness</strong></td><td>How current is the data? Minutes, hours, or a day behind.</td><td class="num">10%</td></tr>
+            <tr><td><strong>Security posture</strong></td><td>How many copies of policyholder data exist, and in how many systems?</td><td class="num">10%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p><strong>Why those weights, for us specifically.</strong> Ops burden leads because we are a small team and it is the only cost that never stops &mdash; a route that needs a person watching it every morning is more expensive in year two than a licence fee. Completeness ranks high because this is regulated financial data where a silently wrong in-force count is a serious problem, not a cosmetic one. Freshness ranks <em>low</em> because broker reporting is a daily-cadence business; nobody is making underwriting decisions on five-minute-old data.</p>
+        <p>If your read of the business differs, change the weights &mdash; 14.3 shows how much that moves the answer.</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>14.2 &nbsp;Weighted scores</h3>
+      <div class="tw">
+        <table>
+          <caption>Scores are 1&ndash;5, higher is better, relative to each other rather than absolute.</caption>
+          <thead>
+            <tr><th>Route</th><th>Ops<br>25%</th><th>Complete<br>20%</th><th>Build<br>20%</th><th>Independ.<br>15%</th><th>Fresh<br>10%</th><th>Security<br>10%</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            <tr class="win"><td class="opt-cell"><strong>A &middot; Clarity share</strong></td><td class="num">5</td><td class="num">4</td><td class="num">5</td><td class="num">2</td><td class="num">5</td><td class="num">5</td><td class="tot">4.35</td></tr>
+            <tr><td class="opt-cell">D &middot; Managed connector</td><td class="num">4</td><td class="num">3</td><td class="num">4</td><td class="num">2</td><td class="num">3</td><td class="num">3</td><td class="tot">3.30</td></tr>
+            <tr><td class="opt-cell">E &middot; Direct database</td><td class="num">2</td><td class="num">5</td><td class="num">2</td><td class="num">3</td><td class="num">5</td><td class="num">3</td><td class="tot">3.15</td></tr>
+            <tr><td class="opt-cell">B &middot; Scheduled extracts</td><td class="num">2</td><td class="num">4</td><td class="num">3</td><td class="num">4</td><td class="num">2</td><td class="num">3</td><td class="tot">3.00</td></tr>
+            <tr><td class="opt-cell">C &middot; API ingestion</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">5</td><td class="num">4</td><td class="num">3</td><td class="tot">2.50</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note warn">
+        <span class="label">Read the table with these two caveats</span>
+        <p><strong>D&rsquo;s score assumes we already license a platform.</strong> If we would be buying one purely for this, its build and independence scores drop and it falls below B. That is why it is one email, not an evaluation.</p>
+        <p><strong>E scores respectably but is almost certainly unavailable.</strong> A high score on an unavailable route is worth nothing &mdash; which is precisely why 14.4 gates on availability rather than simply picking the top row.</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>14.3 &nbsp;How sensitive is this to the weights?</h3>
+      <div class="prose"><p>A scoring exercise that only works with one set of weights is not worth much. Here is what happens when the business priorities differ.</p></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th style="width:30%">If you believe&hellip;</th><th style="width:24%">Then re-weight</th><th>And the answer becomes</th></tr></thead>
+          <tbody>
+            <tr><td>&ldquo;We need near-real-time data for pricing or fraud&rdquo;</td><td>Freshness to 30%</td><td><strong>A still wins</strong>, E rises to second. B falls away entirely &mdash; daily files cannot meet that requirement at any price.</td></tr>
+            <tr><td>&ldquo;We cannot accept dependence on a vendor for our own reporting&rdquo;</td><td>Independence to 30%</td><td>B rises to second and C becomes viable. A still leads on raw score but the gap narrows sharply &mdash; and this is a legitimate reason to take the local snapshot in &sect;5.3.</td></tr>
+            <tr><td>&ldquo;We have a platform team; ops burden is not our constraint&rdquo;</td><td>Ops to 10%, Build to 30%</td><td>B becomes genuinely competitive with D. A still leads because it is both cheap to build <em>and</em> cheap to run.</td></tr>
+            <tr><td>&ldquo;Correctness matters more than anything&rdquo;</td><td>Completeness to 35%</td><td><strong>E wins on score</strong> &mdash; true CDC with deletes is the most complete option there is. It remains almost certainly unavailable, which is the whole problem.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <p><strong>A leads under every plausible weighting.</strong> That is unusual in an exercise like this, and it is worth saying plainly: it is not close, and the reason is that Route A is the only option that is simultaneously fast to build, cheap to run, and low-risk on data handling. Its single weakness is dependence on Duck&nbsp;Creek &mdash; which is mitigable (&sect;5.3) and which we already have anyway, since they are our core system.</p>
+      </div>
+    </div>
+
+    <div class="sub">
+      <h3>14.4 &nbsp;The gate &mdash; four questions in order</h3>
+      <div class="prose"><p>Work down this list and stop at the first yes. Each question is answered by a specific item in &sect;16.</p></div>
+      <div class="ladder">
+        <div class="rung"><div class="rung-l"><span class="pl">Q1</span><span class="cd">Entitlement</span></div><div class="rung-r">
+          <h4>Are we licensed for Clarity, or can we be at acceptable cost?</h4>
+          <p class="cond">Yes &rarr; Route A. Stop evaluating.</p>
+          <p>Nothing else competes on score. If we are not licensed, get a price before dismissing it &mdash; and weigh that price against &sect;12&rsquo;s comparison, which counts the permanent operational load of the alternatives, not just their build cost.</p>
+        </div></div>
+        <div class="rung"><div class="rung-l"><span class="pl">Q2</span><span class="cd">Extracts</span></div><div class="rung-r">
+          <h4>Will they deliver scheduled extracts to a bucket we own?</h4>
+          <p class="cond">Yes &rarr; Route B. Settle format, cadence, grain and control totals in the same conversation.</p>
+          <p>This is the likeliest yes of all five, which is why it is the primary fallback. Build it with the control plane from &sect;06 step 8 included from the start &mdash; retrofitting it after the first incident is how these pipelines get a bad reputation.</p>
+        </div></div>
+        <div class="rung"><div class="rung-l"><span class="pl">Q3</span><span class="cd">Hosting</span></div><div class="rung-r">
+          <h4>Is our Duck Creek instance self-hosted rather than vendor-hosted?</h4>
+          <p class="cond">Yes &rarr; Route E becomes available and jumps up the list.</p>
+          <p>If we host it, database access is ours to grant. Ask for a read replica rather than production, and expect to justify the load. Note this reordering only happens on a yes &mdash; on vendor-hosted SaaS the question closes permanently.</p>
+        </div></div>
+        <div class="rung"><div class="rung-l"><span class="pl">Q4</span><span class="cd">Fallback</span></div><div class="rung-r">
+          <h4>All three answered no?</h4>
+          <p class="cond">Route C, scoped deliberately narrow, with a review date set at creation.</p>
+          <p>Take the entities that carry real reporting value, accept that history and deletes are limited, document those limits where analysts will actually encounter them, and keep pressing Q1 and Q2 in parallel. The failure mode to guard against is a tactical pipeline quietly becoming the permanent architecture because nobody ever revisited it.</p>
+        </div></div>
+      </div>
+      <div class="note">
+        <span class="label">Check D at the same time, not after</span>
+        <p>Route D is not a rung on this ladder &mdash; it is a modifier on B and C. Send one internal email asking whether we already license a connector platform. If yes, it makes whichever of B or C we land on materially cheaper to operate. If no, ignore it.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s15">
+    <div class="sec-head"><span class="sec-num">15</span><h2>Recommendation</h2></div>
+    <div class="prose"><p class="lede">Run the vendor conversation and the build in parallel. Commit to the destination now; keep the source deliberately open until the answers land.</p></div>
+    <div class="ladder">
+      <div class="rung now"><div class="rung-l"><span class="pl">NOW</span><span class="cd">No dependency</span></div><div class="rung-r">
+        <h4>Build &sect;04 and replicate the Gyrus application database</h4>
+        <p>Foundation, roles, staging pattern &mdash; then CDC from our own database using &sect;09&rsquo;s pattern. That data needs nobody&rsquo;s permission. Quote-to-bind conversion, broker activity and journey drop-off are all answerable from Gyrus data alone, and they are questions the business already asks.</p>
+        <p class="cond">Starts today &middot; ~70% of total build &middot; entirely unblocked</p>
+      </div></div>
+      <div class="rung"><div class="rung-l"><span class="pl">PLAN A</span><span class="cd">Score 4.35</span></div><div class="rung-r">
+        <h4>Secure data share from Clarity</h4>
+        <p>Open with the account team this week using &sect;16. If available, it removes the ingestion problem rather than solving it. Decide the local-snapshot question (&sect;5.3) at the same time, because it affects the storage estimate and the continuity story.</p>
+        <p class="cond">Decision point: end of the qualification call</p>
+      </div></div>
+      <div class="rung"><div class="rung-l"><span class="pl">PLAN B</span><span class="cd">Score 3.00</span></div><div class="rung-r">
+        <h4>Scheduled extracts into cloud storage</h4>
+        <p>Request in the same conversation so a no on A costs no extra round trip. Build &sect;06 including step 8 from day one, and test the missing-file alert by deliberately skipping a delivery before calling it done.</p>
+        <p class="cond">Trigger: A unavailable or priced out</p>
+      </div></div>
+      <div class="rung"><div class="rung-l"><span class="pl">PLAN C</span><span class="cd">Score 2.50</span></div><div class="rung-r">
+        <h4>Narrow API ingestion</h4>
+        <p>A deliberately scoped subset with its limitations recorded in the warehouse itself, and an explicit review date. A bridge, not a destination.</p>
+        <p class="cond">Trigger: A and B both unavailable</p>
+      </div></div>
+    </div>
+    <div class="note">
+      <span class="label">Why this shape rather than deciding first</span>
+      <p>The expensive failure here is waiting. Every week spent deciding is a week the foundation is not being built &mdash; and that foundation is identical under all five routes. Committing to the destination while keeping the source open costs us nothing and buys back the entire qualification period.</p>
+    </div>
+  </section>
+
+  <section id="s16">
+    <div class="sec-head"><span class="sec-num">16</span><h2>Questions for Duck Creek</h2></div>
+    <div class="prose"><p>Take all twelve to one call, sent in writing beforehand so they arrive with answers rather than actions. Each maps to a gate in &sect;14.4.</p></div>
+
+    <div class="qgroup"><h4>Entitlement and sharing &mdash; gates Q1</h4><ol class="qlist">
+      <li><span class="qn">Q1</span><span><strong>Does our agreement include Duck&nbsp;Creek Clarity?</strong> If not, what would it cost to add?<span class="qw">Decides whether Plan A is an engineering task or a procurement one.</span></span></li>
+      <li><span class="qn">Q2</span><span><strong>Can Clarity data be shared into a Snowflake account we own, using Snowflake Secure Data Sharing?</strong><span class="qw">The core question. A yes removes the ingestion problem entirely.</span></span></li>
+      <li><span class="qn">Q3</span><span><strong>Which cloud and region hosts our Clarity tenant?</strong><span class="qw">Cross-region sharing needs replication on their side. Ask before we provision our account so we can place it to match.</span></span></li>
+      <li><span class="qn">Q4</span><span><strong>Which entities and fields does the Clarity model expose, and how often does it refresh?</strong><span class="qw">Sets our freshness ceiling and reveals any gap that would need a supplementary route.</span></span></li>
+      <li><span class="qn">Q5</span><span><strong>Is change tracking enabled on the shared objects?</strong><span class="qw">Determines whether our dynamic tables refresh incrementally or fall back to full refresh &mdash; a material cost difference on large tables.</span></span></li>
+    </ol></div>
+
+    <div class="qgroup"><h4>Extracts &mdash; gates Q2</h4><ol class="qlist">
+      <li><span class="qn">Q6</span><span><strong>Can you deliver scheduled extracts to a bucket we own?</strong> In which formats &mdash; CSV, Parquet, Excel?<span class="qw">Push for CSV or Parquet. Excel adds a normalisation step and a family of parsing defects (&sect;6.3).</span></span></li>
+      <li><span class="qn">Q7</span><span><strong>Can each delivery include control totals &mdash; row counts and key column sums?</strong><span class="qw">The single highest-value item to negotiate. Without it, reconciliation is guesswork.</span></span></li>
+      <li><span class="qn">Q8</span><span><strong>Are extracts full snapshots or deltas, and do they carry deleted records in any form?</strong><span class="qw">Determines whether deletions are detectable at all (&sect;10).</span></span></li>
+      <li><span class="qn">Q9</span><span><strong>What notice do we get before an extract schema changes?</strong><span class="qw">Silent column changes are the commonest cause of quietly wrong numbers in file pipelines.</span></span></li>
+    </ol></div>
+
+    <div class="qgroup"><h4>Deployment, API and compliance &mdash; gates Q3 and Q4</h4><ol class="qlist">
+      <li><span class="qn">Q10</span><span><strong>Is our instance vendor-hosted or self-hosted?</strong> If self-hosted, can we have read-replica access for reporting?<span class="qw">Reopens Route E entirely.</span></span></li>
+      <li><span class="qn">Q11</span><span><strong>What are the API rate limits, is there a bulk endpoint, and is there a non-production environment?</strong><span class="qw">Decides whether Plan C is viable, and whether we would be loading the same API that serves the live broker site.</span></span></li>
+      <li><span class="qn">Q12</span><span><strong>What data residency, retention or masking obligations apply to policyholder data we replicate?</strong><span class="qw">Answer before the first row moves. May also constrain which region our account lives in.</span></span></li>
+    </ol></div>
+  </section>
+
+  <section id="s17">
+    <div class="sec-head"><span class="sec-num">17</span><h2>First 90 days</h2></div>
+    <div class="plan">
+      <div class="step"><span class="step-when">Week 1</span><div class="step-what">
+        <h4>Send &sect;16 and book the call</h4>
+        <p>In writing, ahead of the meeting. Same week, send the one internal email about whether we already license a connector platform &mdash; that rules Route D in or out immediately.</p>
+        <span class="owner">Owner: platform lead &middot; vendor management</span></div></div>
+      <div class="step"><span class="step-when">Week 1&ndash;2</span><div class="step-what">
+        <h4>Foundation &mdash; &sect;04 steps 1 to 5</h4>
+        <p>Database, five schemas, three warehouses, three roles with future grants, resource monitor. Place the account in the region most likely to match Clarity, using the answer to Q3 if it has arrived.</p>
+        <span class="owner">Owner: data engineering</span></div></div>
+      <div class="step"><span class="step-when">Week 2&ndash;4</span><div class="step-what">
+        <h4>Replicate the Gyrus application database</h4>
+        <p>Using &sect;09&rsquo;s CDC pattern against our own database. Treat it as the reference implementation every later source will follow &mdash; including the delete-behaviour test from &sect;10, which you will need again for Duck&nbsp;Creek.</p>
+        <span class="owner">Owner: data engineering</span></div></div>
+      <div class="step"><span class="step-when">Week 4&ndash;5</span><div class="step-what">
+        <h4>First marts and a dashboard people use</h4>
+        <p><span class="mono">FCT_QUOTE</span>, <span class="mono">DIM_BROKER</span>, <span class="mono">DIM_DATE</span>. Quote-to-bind funnel and journey drop-off. Shipping something real from data we already control proves the platform and buys patience for the vendor conversation.</p>
+        <span class="owner">Owner: data engineering &middot; analytics</span></div></div>
+      <div class="step"><span class="step-when">Week 5&ndash;8</span><div class="step-what">
+        <h4>Implement the chosen Duck Creek route</h4>
+        <p>Plan A: mount the share, settle the local-snapshot question, validate against a real reporting question. Plan B: agree the extract spec, build the landing zone and the full control plane. Plan C: scope the subset and set the review date.</p>
+        <span class="owner">Owner: data engineering</span></div></div>
+      <div class="step"><span class="step-when">Week 8&ndash;10</span><div class="step-what">
+        <h4>Integrate Duck Creek data into the model</h4>
+        <p><span class="mono">FCT_POLICY_VERSION</span>, <span class="mono">FCT_PREMIUM_TXN</span>, <span class="mono">FCT_CLAIM</span>. Reconcile against source control totals <em>before</em> anyone builds a report on them.</p>
+        <span class="owner">Owner: data engineering &middot; analytics</span></div></div>
+      <div class="step"><span class="step-when">Week 10&ndash;12</span><div class="step-what">
+        <h4>Harden and hand over</h4>
+        <p>Quality tests scheduled, freshness view on every dashboard, masking applied, missing-file alerting tested by deliberately skipping a delivery, runbook written, on-call briefed.</p>
+        <span class="owner">Owner: data engineering</span></div></div>
+      <div class="step"><span class="step-when">Week 12</span><div class="step-what">
+        <h4>Close this record</h4>
+        <p>Update the status at the top with the route chosen and the evidence behind it. A decision record left permanently open stops being a decision.</p>
+        <span class="owner">Owner: platform lead</span></div></div>
+    </div>
+  </section>
+
+  <section id="s18">
+    <div class="sec-head"><span class="sec-num">18</span><h2>Risks</h2></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th style="width:24%">Risk</th><th>Consequence</th><th style="width:34%">Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Clarity carries a significant licence cost</strong></td><td>The best route becomes a budget decision that stalls delivery.</td><td>Get the number early; compare against &sect;12, not against zero. Plan B stays warm regardless.</td></tr>
+          <tr><td><strong>The vendor conversation drags</strong></td><td>Nothing ships and the warehouse loses sponsorship before it exists.</td><td>The &ldquo;now&rdquo; workstream exists precisely so this cannot happen. Dashboard in week five.</td></tr>
+          <tr><td><strong>Share cannot refresh incrementally</strong></td><td>Dynamic tables fall back to full refresh; transformation cost rises sharply on large tables.</td><td>Q5. If unavailable, refresh against an update timestamp instead.</td></tr>
+          <tr><td><strong>Extracts arrive as Excel</strong></td><td>A normalisation step plus a family of parsing defects.</td><td>Negotiate CSV or Parquet in the same call; &sect;6.3 if unavoidable.</td></tr>
+          <tr><td><strong>Deletes undetectable on the chosen route</strong></td><td>Cancelled policies persist. In-force counts, GWP and commission all overstate.</td><td>&sect;10 empirical test before modelling. Snapshot diffing where needed, gated on reconciliation.</td></tr>
+          <tr><td><strong>Schema drift lands silently</strong></td><td>New fields go nowhere; reordered columns corrupt values.</td><td><span class="mono">MATCH_BY_COLUMN_NAME</span> plus a scheduled drift check against <span class="mono">INFER_SCHEMA</span>.</td></tr>
+          <tr><td><strong>Tactical API pipeline becomes permanent</strong></td><td>An unowned integration accrues maintenance cost and quietly caps what the warehouse can answer.</td><td>Explicit review date at creation; limitations recorded where analysts see them.</td></tr>
+          <tr><td><strong>PII replicated without review</strong></td><td>Compliance exposure found late, when unwinding is expensive.</td><td>Q12 before the first row moves. Exclude at source; mask what must be carried.</td></tr>
+          <tr><td><strong>Access revoked with no local copy</strong></td><td>Reporting stops immediately if a share is withdrawn.</td><td>Treat the &sect;5.3 local snapshot as business continuity, not a technical nicety.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>Decision record DR-001 rev 3 &mdash; Gyrus data platform. Implementation detail condensed from internal runbooks covering CDC replication into Snowflake, file-based ingestion with Snowpipe, and the ELT modelling layer. All SQL is illustrative and must be reviewed against the chosen route&rsquo;s actual schema before use.</p>
+  <ul class="srclist">
+    <li><span class="label">Sources</span></li>
+    <li><a href="https://www.duckcreek.com/partner/snowflake/">Duck Creek &mdash; Snowflake partnership</a></li>
+    <li><a href="https://www.duckcreek.com/blog/introduction-duck-creek-clarity-data-analytics/">Duck Creek Clarity overview</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/data-sharing-intro">Snowflake &mdash; Secure Data Sharing</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/data-load-snowpipe-intro">Snowflake &mdash; Snowpipe</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/dynamic-tables-about">Snowflake &mdash; Dynamic Tables</a></li>
+  </ul>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var map = {};
+  links.forEach(function(a){
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) { map[el.id] = a; }
+  });
+  var targets = Object.keys(map).map(function(id){ return document.getElementById(id); });
+  if (!targets.length || !('IntersectionObserver' in window)) { return; }
+
+  var visible = {};
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if (en.isIntersecting) { visible[en.target.id] = true; }
+      else { delete visible[en.target.id]; }
+    });
+    var first = null;
+    for (var i = 0; i < targets.length; i++) {
+      if (visible[targets[i].id]) { first = targets[i]; break; }
+    }
+    links.forEach(function(a){ a.classList.remove('on'); });
+    if (first && map[first.id]) { map[first.id].classList.add('on'); }
+  }, { rootMargin: '-8% 0px -74% 0px', threshold: 0 });
+
+  targets.forEach(function(t){ obs.observe(t); });
+})();
+</script>
+</body>
+</html>
