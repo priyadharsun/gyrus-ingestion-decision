@@ -264,8 +264,7 @@ button,input,select,textarea{font:inherit;color:inherit}
       <li><a href="#s14">14 &nbsp;How to select</a></li>
       <li><a href="#s15">15 &nbsp;Recommendation</a></li>
       <li><a href="#s16">16 &nbsp;Vendor questions</a></li>
-      <li><a href="#s17">17 &nbsp;90-day plan</a></li>
-      <li><a href="#s18">18 &nbsp;Risks</a></li>
+      <li><a href="#s17">17 &nbsp;Risks</a></li>
     </ol>
   </nav>
 
@@ -1701,45 +1700,7 @@ $$;</pre></div>
   </section>
 
   <section id="s17">
-    <div class="sec-head"><span class="sec-num">17</span><h2>First 90 days</h2></div>
-    <div class="plan">
-      <div class="step"><span class="step-when">Week 1</span><div class="step-what">
-        <h4>Send &sect;16 and book the call</h4>
-        <p>In writing, ahead of the meeting. Same week, send the one internal email about whether we already license a connector platform &mdash; that rules Route D in or out immediately.</p>
-        <span class="owner">Owner: platform lead &middot; vendor management</span></div></div>
-      <div class="step"><span class="step-when">Week 1&ndash;2</span><div class="step-what">
-        <h4>Foundation &mdash; &sect;04 steps 1 to 5</h4>
-        <p>Database, five schemas, three warehouses, three roles with future grants, resource monitor. Place the account in the region most likely to match Clarity, using the answer to Q3 if it has arrived.</p>
-        <span class="owner">Owner: data engineering</span></div></div>
-      <div class="step"><span class="step-when">Week 2&ndash;4</span><div class="step-what">
-        <h4>Replicate the Gyrus application database</h4>
-        <p>Using &sect;09&rsquo;s CDC pattern against our own database. Treat it as the reference implementation every later source will follow &mdash; including the delete-behaviour test from &sect;10, which you will need again for Duck&nbsp;Creek.</p>
-        <span class="owner">Owner: data engineering</span></div></div>
-      <div class="step"><span class="step-when">Week 4&ndash;5</span><div class="step-what">
-        <h4>First marts and a dashboard people use</h4>
-        <p><span class="mono">FCT_QUOTE</span>, <span class="mono">DIM_BROKER</span>, <span class="mono">DIM_DATE</span>. Quote-to-bind funnel and journey drop-off. Shipping something real from data we already control proves the platform and buys patience for the vendor conversation.</p>
-        <span class="owner">Owner: data engineering &middot; analytics</span></div></div>
-      <div class="step"><span class="step-when">Week 5&ndash;8</span><div class="step-what">
-        <h4>Implement the chosen Duck Creek route</h4>
-        <p>Plan A: mount the share, settle the local-snapshot question, validate against a real reporting question. Plan B: agree the extract spec, build the landing zone and the full control plane. Plan C: scope the subset and set the review date.</p>
-        <span class="owner">Owner: data engineering</span></div></div>
-      <div class="step"><span class="step-when">Week 8&ndash;10</span><div class="step-what">
-        <h4>Integrate Duck Creek data into the model</h4>
-        <p><span class="mono">FCT_POLICY_VERSION</span>, <span class="mono">FCT_PREMIUM_TXN</span>, <span class="mono">FCT_CLAIM</span>. Reconcile against source control totals <em>before</em> anyone builds a report on them.</p>
-        <span class="owner">Owner: data engineering &middot; analytics</span></div></div>
-      <div class="step"><span class="step-when">Week 10&ndash;12</span><div class="step-what">
-        <h4>Harden and hand over</h4>
-        <p>Quality tests scheduled, freshness view on every dashboard, masking applied, missing-file alerting tested by deliberately skipping a delivery, runbook written, on-call briefed.</p>
-        <span class="owner">Owner: data engineering</span></div></div>
-      <div class="step"><span class="step-when">Week 12</span><div class="step-what">
-        <h4>Close this record</h4>
-        <p>Update the status at the top with the route chosen and the evidence behind it. A decision record left permanently open stops being a decision.</p>
-        <span class="owner">Owner: platform lead</span></div></div>
-    </div>
-  </section>
-
-  <section id="s18">
-    <div class="sec-head"><span class="sec-num">18</span><h2>Risks</h2></div>
+    <div class="sec-head"><span class="sec-num">17</span><h2>Risks</h2></div>
     <div class="tw">
       <table>
         <thead><tr><th style="width:24%">Risk</th><th>Consequence</th><th style="width:34%">Mitigation</th></tr></thead>

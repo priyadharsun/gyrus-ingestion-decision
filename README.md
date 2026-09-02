@@ -12,7 +12,7 @@ warehouse for the Gyrus broker platform.
 | 01–04 | The decision, a Snowflake primer for engineers new to it, and the foundation work that is identical under every route |
 | 05–09 | The five routes, each as a numbered walkthrough: Clarity data share, scheduled extracts, API ingestion, managed connector, direct database CDC |
 | 10–13 | Cross-cutting concerns: deletes, the dimensional model, cost, security and PII |
-| 14–18 | A weighted selection framework, the recommendation, vendor questions, a 90-day plan and risks |
+| 14–17 | A weighted selection framework, the recommendation, vendor questions and risks |
 
 ## Structure
 
